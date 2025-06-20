@@ -13,15 +13,18 @@ os.environ.get("LANGSMITH_API_KEY")
 
 from chatlib.state_types import State
 from chatlib.guidlines_rag_agent_li import rag_retrieve
+from chatlib.patient_sql_agent import sql_chain
 
-tools = [rag_retrieve]
+tools = [rag_retrieve, sql_chain]
 llm = ChatOpenAI(temperature = 0.0, model="gpt-4o")
-llm_with_tools = llm.bind_tools([rag_retrieve])
+llm_with_tools = llm.bind_tools([rag_retrieve, sql_chain])
 
 # System message
 sys_msg = SystemMessage(content="""
                         You are a helpful assistant tasked with helping clinicians
-                        access information from HIV clinical guidelines.
+                        meeting with patients. You have two tools available, 
+                        one to access information from HIV clinical guidelines, the other is
+                        a SQL tool to access patient data.
                         """
                         )
 
@@ -48,9 +51,9 @@ builder.add_edge("tools", "assistant")
 react_graph = builder.compile(checkpointer=memory)
 
 # Specify a thread
-config = {"configurable": {"thread_id": "11"}}
+config = {"configurable": {"thread_id": "13"}}
 
-messages = [HumanMessage(content="What are the first-line treatments for HIV in Kenya?")]
+messages = [HumanMessage(content="what is the proper course of treatment for someone with opportunistic infections?")]
 messages = react_graph.invoke({"messages": messages}, config)
 for m in messages['messages']:
     m.pretty_print()

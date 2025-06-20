@@ -1,4 +1,5 @@
 from llama_index.core import StorageContext, load_index_from_storage
+from langchain_core.tools import tool
 from .state_types import State
 
 # Load index for retrieval
@@ -8,6 +9,7 @@ retriever = index.as_retriever(similarity_top_k=5,
                                 # Similarity threshold for filtering
                                 similarity_threshold=0.5)
 
+@tool
 def rag_retrieve(state:State) -> State:
     """Perform RAG search of repository containing authoritative information on HIV/AIDS in Kenya.
 
