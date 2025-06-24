@@ -9,3 +9,4 @@ class State(TypedDict):
     query: str
     result: str
     answer: str
+    pk_hash: str

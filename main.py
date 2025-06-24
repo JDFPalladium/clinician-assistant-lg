@@ -25,15 +25,35 @@ sys_msg = SystemMessage(content="""
                         meeting with patients. You have two tools available, 
                         one to access information from HIV clinical guidelines, the other is
                         a SQL tool to access patient data.
+
+                        You must respond only with a JSON object specifying the tool to call and its arguments.
+                        Do not generate any SQL queries or answers yourself.
                         """
                         )
 
 # Assistant Node
-def assistant(state: MessagesState):
-   return {"messages": [llm_with_tools.invoke([sys_msg] + state["messages"])]}
+def assistant(state: State) -> State:
+    pk_hash = state.get("pk_hash", None)
+
+    if pk_hash:
+        pk_msg = SystemMessage(content=f"The patient identifier (pk_hash) is: {pk_hash}")
+        messages = [sys_msg, pk_msg] + state["messages"]
+    else:
+        messages = [sys_msg] + state["messages"]
+
+    # Get the LLM/tool response
+    new_message = llm_with_tools.invoke(messages)
+    # Extract the question from the latest HumanMessage, if present
+  
+    latest_question = ""
+    for msg in reversed(messages):
+        if isinstance(msg, HumanMessage):
+            latest_question = msg.content
+            break
+    return {**state, "messages": state['messages'] + [new_message], "question": latest_question}
 
 # Graph
-builder = StateGraph(MessagesState)
+builder = StateGraph(State)
 
 # Define nodes: these do the work
 builder.add_node("assistant", assistant)
@@ -51,9 +71,22 @@ builder.add_edge("tools", "assistant")
 react_graph = builder.compile(checkpointer=memory)
 
 # Specify a thread
-config = {"configurable": {"thread_id": "13"}}
+memory.delete_thread("25")
+config = {"configurable": {"thread_id": "25", "user_id": "1"}}
 
-messages = [HumanMessage(content="what is the proper course of treatment for someone with opportunistic infections?")]
-messages = react_graph.invoke({"messages": messages}, config)
-for m in messages['messages']:
+# initialize state with patient pk hash
+input_state:State = {
+    "messages": [HumanMessage(content="how many visits were recorded in 2024?")],
+    "question": "",
+    "rag_result": "",
+    "query": "",
+    "result": "",
+    "answer": "",
+    "pk_hash": "962885FEADB7CCF19A2CC506D39818EC448D5396C4D1AEFDC59873090C7FBF73"
+}
+
+# messages = [HumanMessage(content="how many appointments has this patient had?")]
+message_output = react_graph.invoke(input_state, config)
+
+for m in message_output['messages']:
     m.pretty_print()
