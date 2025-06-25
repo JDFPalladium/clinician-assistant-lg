@@ -1,12 +1,26 @@
-from typing_extensions import TypedDict, Annotated
+from typing_extensions import TypedDict, Annotated, Optional
 from langchain_core.messages import AnyMessage
 from langgraph.graph.message import add_messages
 
-class State(TypedDict):
-    messages: Annotated[list[AnyMessage], add_messages]
+class ConversationState(TypedDict):
     question: str
-    rag_result: str
-    query: str
-    result: str
     answer: str
-    pk_hash: str
+    pk_hash: Optional[str]
+
+class QueryState(TypedDict):
+    query: str
+    result: Optional[str]
+
+class AppState(TypedDict):
+    messages: Annotated[list[AnyMessage], add_messages]
+    conversation: ConversationState
+    query_data: QueryState
+
+# class State(TypedDict):
+#     messages: Annotated[list[AnyMessage], add_messages]
+#     question: str
+#     rag_result: str
+#     query: str
+#     result: str
+#     answer: str
+#     pk_hash: str

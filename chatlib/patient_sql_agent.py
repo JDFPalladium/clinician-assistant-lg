@@ -4,10 +4,13 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.tools import tool
 from langchain_openai import ChatOpenAI
 from typing_extensions import TypedDict, Annotated
-from .state_types import State
+from .state_types import AppState
 
 db = SQLDatabase.from_uri("sqlite:///data/patient_demonstration.sqlite")
 llm = ChatOpenAI(temperature = 0.0, model="gpt-4o")
+
+# from langchain_ollama.chat_models import ChatOllama
+# local_llm = ChatOllama(model="llama3.2:1b", temperature=0)
 
 # setup template for sql query tool
 system_message = """
@@ -66,28 +69,40 @@ class QueryOutput(TypedDict):
     query: Annotated[str, ..., "Syntactically valid SQL query."]
 
 
-def write_query(state:State) -> State:
+def write_query(state:AppState) -> AppState:
     """Generate SQL query to fetch information."""
+    conv = state["conversation"]
+    query_data = state["query_data"]
+
     prompt = query_prompt_template.invoke(
         {
             "dialect": db.dialect,
             "top_k": 10,
             "table_info": db.get_table_info(),
-            "input": state["question"],
-            "pk_hash": state["pk_hash"]
+            "input": conv["question"],
+            "pk_hash": conv.get("pk_hash", "")
+            # "input": state["question"],
+            # "pk_hash": state["pk_hash"]
         }
     )
 
     structured_llm = llm.with_structured_output(QueryOutput)
     result = structured_llm.invoke(prompt)
-    return {**state, "query": result["query"]}
+    query_data["query"] = result["query"]
+    state["query_data"] = query_data
+    return state
+    # return {**state, "query": result["query"]}
 
-def execute_query(state:State) -> State:
+def execute_query(state:AppState) -> AppState:
     """Execute SQL query."""
+    query_data = state["query_data"]
     execute_query_tool = QuerySQLDatabaseTool(db=db)
-    return {**state, "result": execute_query_tool.invoke(state["query"])}
+    query_data["result"] = execute_query_tool.invoke(query_data["query"])
+    state["query_data"] = query_data
+    return state
+    # return {**state, "result": execute_query_tool.invoke(state["query"])}
 
-def generate_answer(state:State) -> State:
+def generate_answer(state:AppState) -> AppState:
     """
     Answer question using retrieved information as context.
     For awareness, NextAppointmentDate is set during the VisitDate of the same entry.
@@ -97,19 +112,28 @@ def generate_answer(state:State) -> State:
     2023-01-15 to determine if the patient came on time.
     
     """
+    conv = state["conversation"]
+    query_data = state["query_data"]
+
     prompt = (
         "Given the following user question, corresponding SQL query, "
         "and SQL result, answer the user question.\n\n"
-        f'Question: {state["question"]}\n'
-        f'SQL Query: {state["query"]}\n'
-        f'SQL Result: {state["result"]}'        
+        f'Question: {conv["question"]}\n'
+        f'SQL Query: {query_data["query"]}\n'
+        f'SQL Result: {query_data["result"]}'  
+        # f'Question: {state["question"]}\n'
+        # f'SQL Query: {state["query"]}\n'
+        # f'SQL Result: {state["result"]}'        
     )
     response = llm.invoke(prompt)
-    return {**state, "answer": response.content}
+    conv["answer"] = response.content
+    state["conversation"] = conv
+    return state
+    # return {**state, "answer": response.content}
 
 # now define a stateful tool that does the same thing
 @tool 
-def sql_chain(state:State) -> State:
+def sql_chain(state:AppState) -> AppState:
     """
     Annotated function that takes a question string seeking information on patient data
     from a SQL database, writes an SQL query to retrieve relevant data, executes the query,

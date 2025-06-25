@@ -11,9 +11,12 @@ load_dotenv("config.env")
 os.environ.get("OPENAI_API_KEY")
 os.environ.get("LANGSMITH_API_KEY")
 
-from chatlib.state_types import State
+from chatlib.state_types import AppState
 from chatlib.guidlines_rag_agent_li import rag_retrieve
 from chatlib.patient_sql_agent import sql_chain
+
+# from langchain_ollama.chat_models import ChatOllama
+# llm = ChatOllama(model="llama3.2:1b", temperature=0)
 
 tools = [rag_retrieve, sql_chain]
 llm = ChatOpenAI(temperature = 0.0, model="gpt-4o")
@@ -28,12 +31,15 @@ sys_msg = SystemMessage(content="""
 
                         You must respond only with a JSON object specifying the tool to call and its arguments.
                         Do not generate any SQL queries or answers yourself.
+                        When calling a tool, always provide the full state as a dictionary, including all required fields (messages, question, rag_result, query, result, answer, pk_hash).
+                        Do not pass a string or partial object as arguments.
                         """
                         )
 
 # Assistant Node
-def assistant(state: State) -> State:
-    pk_hash = state.get("pk_hash", None)
+def assistant(state: AppState) -> AppState:
+    conv = state["conversation"]
+    pk_hash = conv.get("pk_hash", None)
 
     if pk_hash:
         pk_msg = SystemMessage(content=f"The patient identifier (pk_hash) is: {pk_hash}")
@@ -50,10 +56,15 @@ def assistant(state: State) -> State:
         if isinstance(msg, HumanMessage):
             latest_question = msg.content
             break
-    return {**state, "messages": state['messages'] + [new_message], "question": latest_question}
+
+    state['messages'] = state['messages'] + [new_message]
+    conv['question'] = latest_question
+    state['conversation'] = conv
+    return state
+    # return {**state, "messages": state['messages'] + [new_message], "question": latest_question}
 
 # Graph
-builder = StateGraph(State)
+builder = StateGraph(AppState)
 
 # Define nodes: these do the work
 builder.add_node("assistant", assistant)
@@ -61,12 +72,7 @@ builder.add_node("tools", ToolNode(tools))
 
 # Define edges: these determine how the control flow moves
 builder.add_edge(START, "assistant")
-builder.add_conditional_edges(
-    "assistant",
-    # If the latest message (result) from assistant is a tool call -> tools_condition routes to tools
-    # If the latest message (result) from assistant is a not a tool call -> tools_condition routes to END
-    tools_condition,
-)
+builder.add_conditional_edges("assistant", tools_condition)
 builder.add_edge("tools", "assistant")
 react_graph = builder.compile(checkpointer=memory)
 
@@ -75,14 +81,27 @@ memory.delete_thread("25")
 config = {"configurable": {"thread_id": "25", "user_id": "1"}}
 
 # initialize state with patient pk hash
-input_state:State = {
-    "messages": [HumanMessage(content="how many visits were recorded in 2024?")],
-    "question": "",
-    "rag_result": "",
-    "query": "",
-    "result": "",
-    "answer": "",
-    "pk_hash": "962885FEADB7CCF19A2CC506D39818EC448D5396C4D1AEFDC59873090C7FBF73"
+# input_state:State = {
+#     "messages": [HumanMessage(content="was this person typically late or on time to their visits?")],
+#     "question": "",
+#     "rag_result": "",
+#     "query": "",
+#     "result": "",
+#     "answer": "",
+#     "pk_hash": "962885FEADB7CCF19A2CC506D39818EC448D5396C4D1AEFDC59873090C7FBF73"
+# }
+
+input_state: AppState = {
+    "messages": [HumanMessage(content="was this person typically late or on time to their visits?")],
+    "conversation": {
+        "question": "was this person typically late or on time to their visits?",
+        "answer": "",
+        "pk_hash": "962885FEADB7CCF19A2CC506D39818EC448D5396C4D1AEFDC59873090C7FBF73",
+    },
+    "query_data": {
+        "query": "",
+        "result": None,
+    },
 }
 
 # messages = [HumanMessage(content="how many appointments has this patient had?")]
