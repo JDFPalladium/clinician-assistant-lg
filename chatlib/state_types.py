@@ -1,4 +1,6 @@
 from typing_extensions import TypedDict, Annotated, Optional
+from pydantic import BaseModel, Field
+from typing import List, Optional
 from langchain_core.messages import AnyMessage
 from langgraph.graph.message import add_messages
 
@@ -15,6 +17,10 @@ class AppState(TypedDict):
     messages: Annotated[list[AnyMessage], add_messages]
     conversation: ConversationState
     query_data: QueryState
+
+class SqlChainOutputModel(BaseModel):
+    messages: List[AnyMessage] = Field(...)
+    conversation: ConversationState = Field(...)
 
 # class State(TypedDict):
 #     messages: Annotated[list[AnyMessage], add_messages]

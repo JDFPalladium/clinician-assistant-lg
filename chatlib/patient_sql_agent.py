@@ -4,13 +4,15 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.tools import tool
 from langchain_openai import ChatOpenAI
 from typing_extensions import TypedDict, Annotated
-from .state_types import AppState
+
+
+from .state_types import AppState, SqlChainOutputModel
 
 db = SQLDatabase.from_uri("sqlite:///data/patient_demonstration.sqlite")
 llm = ChatOpenAI(temperature = 0.0, model="gpt-4o")
 
-# from langchain_ollama.chat_models import ChatOllama
-# local_llm = ChatOllama(model="llama3.2:1b", temperature=0)
+from langchain_ollama.chat_models import ChatOllama
+local_llm = ChatOllama(model="mistral:latest", temperature=0)
 
 # setup template for sql query tool
 system_message = """
@@ -125,7 +127,7 @@ def generate_answer(state:AppState) -> AppState:
         # f'SQL Query: {state["query"]}\n'
         # f'SQL Result: {state["result"]}'        
     )
-    response = llm.invoke(prompt)
+    response = local_llm.invoke(prompt)
     conv["answer"] = response.content
     state["conversation"] = conv
     return state
@@ -133,7 +135,7 @@ def generate_answer(state:AppState) -> AppState:
 
 # now define a stateful tool that does the same thing
 @tool 
-def sql_chain(state:AppState) -> AppState:
+def sql_chain(state:AppState) -> dict:
     """
     Annotated function that takes a question string seeking information on patient data
     from a SQL database, writes an SQL query to retrieve relevant data, executes the query,
@@ -142,5 +144,17 @@ def sql_chain(state:AppState) -> AppState:
     """
     state = write_query(state)
     state = execute_query(state)
+    print(state['query_data']['query'])
+    print(state['query_data']['result'])
     state = generate_answer(state)
-    return state
+    print(state['conversation']['answer'])
+
+    # Prepare output dict with only messages and conversation
+    output = {
+        "messages": state["messages"],
+        "conversation": state["conversation"],
+    }
+
+    return output
+
+    # return state

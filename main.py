@@ -16,7 +16,7 @@ from chatlib.guidlines_rag_agent_li import rag_retrieve
 from chatlib.patient_sql_agent import sql_chain
 
 # from langchain_ollama.chat_models import ChatOllama
-# llm = ChatOllama(model="llama3.2:1b", temperature=0)
+# llm = ChatOllama(model="mistral:latest", temperature=0)
 
 tools = [rag_retrieve, sql_chain]
 llm = ChatOpenAI(temperature = 0.0, model="gpt-4o")
@@ -26,13 +26,16 @@ llm_with_tools = llm.bind_tools([rag_retrieve, sql_chain])
 sys_msg = SystemMessage(content="""
                         You are a helpful assistant tasked with helping clinicians
                         meeting with patients. You have two tools available, 
-                        one to access information from HIV clinical guidelines, the other is
-                        a SQL tool to access patient data.
+                        rag_retrieve to access information from HIV clinical guidelines,
+                        and sql_chain to access patient data.
 
                         You must respond only with a JSON object specifying the tool to call and its arguments.
-                        Do not generate any SQL queries or answers yourself.
-                        When calling a tool, always provide the full state as a dictionary, including all required fields (messages, question, rag_result, query, result, answer, pk_hash).
-                        Do not pass a string or partial object as arguments.
+                        Do not generate any SQL queries, results or answers yourself. Only the sql_chain
+                        tool should do that.
+                        When calling a tool, provide only the necessary fields required for that tool to run.
+                        Do not include the full state or raw query results in the tool call arguments.
+                        For example, include the question and pk_hash, but exclude the query or result.
+
                         """
                         )
 
@@ -92,9 +95,9 @@ config = {"configurable": {"thread_id": "25", "user_id": "1"}}
 # }
 
 input_state: AppState = {
-    "messages": [HumanMessage(content="was this person typically late or on time to their visits?")],
+    "messages": [HumanMessage(content="when was this patient last seen?")],
     "conversation": {
-        "question": "was this person typically late or on time to their visits?",
+        "question": "",
         "answer": "",
         "pk_hash": "962885FEADB7CCF19A2CC506D39818EC448D5396C4D1AEFDC59873090C7FBF73",
     },
