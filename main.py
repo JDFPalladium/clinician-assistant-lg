@@ -1,7 +1,7 @@
 from dotenv import load_dotenv
 import os
 from langchain_openai import ChatOpenAI
-from langgraph.graph import MessagesState, START, StateGraph
+from langgraph.graph import START, StateGraph
 from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.prebuilt import tools_condition, ToolNode
 from langgraph.checkpoint.memory import MemorySaver
@@ -27,11 +27,22 @@ sys_msg = SystemMessage(content="""
                         You are a helpful assistant tasked with helping clinicians
                         meeting with patients. You have two tools available, 
                         rag_retrieve to access information from HIV clinical guidelines,
-                        and sql_chain to access patient data.
+                        and sql_chain to access patient data. 
+
+                        In most cases, you should use both tools to answer a question.
+                        In these cases, first call rag_retrieve to get the relevant information,
+                        then call sql_chain to get the patient data, and finally combine the results
+                        to provide a complete answer. For example, if the question is about whether 
+                        a patient is on the correct treatment, first retrieve the treatment guidelines
+                        using rag_retrieve, then check the patient's treatment history using sql_chain. 
+                        Another example is if the question is about when they should have their next viral load test,
+                        first retrieve the guidelines for viral load testing using rag_retrieve,
+                        then check the patient's last viral load test date and result using sql_chain.
 
                         You must respond only with a JSON object specifying the tool to call and its arguments.
                         Do not generate any SQL queries, results or answers yourself. Only the sql_chain
                         tool should do that.
+
                         When calling a tool, provide only the necessary fields required for that tool to run.
                         Do not include the full state or raw query results in the tool call arguments.
                         For example, include the question and pk_hash, but exclude the query or result.
@@ -80,25 +91,14 @@ builder.add_edge("tools", "assistant")
 react_graph = builder.compile(checkpointer=memory)
 
 # Specify a thread
-memory.delete_thread("25")
-config = {"configurable": {"thread_id": "25", "user_id": "1"}}
-
-# initialize state with patient pk hash
-# input_state:State = {
-#     "messages": [HumanMessage(content="was this person typically late or on time to their visits?")],
-#     "question": "",
-#     "rag_result": "",
-#     "query": "",
-#     "result": "",
-#     "answer": "",
-#     "pk_hash": "962885FEADB7CCF19A2CC506D39818EC448D5396C4D1AEFDC59873090C7FBF73"
-# }
+config = {"configurable": {"thread_id": "25"}}
 
 input_state: AppState = {
-    "messages": [HumanMessage(content="when was this patient last seen?")],
+    "messages": [HumanMessage(content="when should this patient have their next viral load taken?")],
     "conversation": {
         "question": "",
         "answer": "",
+        "rag_result": "",
         "pk_hash": "962885FEADB7CCF19A2CC506D39818EC448D5396C4D1AEFDC59873090C7FBF73",
     },
     "query_data": {

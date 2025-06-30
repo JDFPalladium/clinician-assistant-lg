@@ -16,3 +16,4 @@ pylint
 black
 pytest
 dotenv
+gradio

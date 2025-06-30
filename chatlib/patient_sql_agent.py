@@ -11,17 +11,18 @@ from .state_types import AppState, SqlChainOutputModel
 db = SQLDatabase.from_uri("sqlite:///data/patient_demonstration.sqlite")
 llm = ChatOpenAI(temperature = 0.0, model="gpt-4o")
 
-from langchain_ollama.chat_models import ChatOllama
-local_llm = ChatOllama(model="mistral:latest", temperature=0)
+# from langchain_ollama.chat_models import ChatOllama
+# local_llm = ChatOllama(model="mistral:latest", temperature=0)
 
 # setup template for sql query tool
 system_message = """
 Given an input question, create a syntactically correct {dialect} query to
-run to help find the answer. Unless the user specifies in his question a
+run to help find the answer. For context, the database contains information about
+patients' demographics, their clinical visits, and their lab tests and their pharmacy pickups.
+Unless the user specifies in his question a
 specific number of examples they wish to obtain, always limit your query to
-at most {top_k} results. For questions about specific patients, filter the 
-PatientPKHash column using exactly the provided value: {pk_hash}. If questions
-are about all patients or not about a specific patient, do not filter.
+at most {top_k} results. Filter PatientPKHash column using exactly the provided value: {pk_hash} if the value is provided
+to get information about the patient with whom the clinician is meeting. 
 
 Never query for all the columns from a specific table, only ask for a the
 few relevant columns given the question.
@@ -82,6 +83,7 @@ def write_query(state:AppState) -> AppState:
             "top_k": 10,
             "table_info": db.get_table_info(),
             "input": conv["question"],
+            # "guidelines": conv.get("rag_result", "No guidelines provided."),
             "pk_hash": conv.get("pk_hash", "")
             # "input": state["question"],
             # "pk_hash": state["pk_hash"]
@@ -118,16 +120,17 @@ def generate_answer(state:AppState) -> AppState:
     query_data = state["query_data"]
 
     prompt = (
-        "Given the following user question, corresponding SQL query, "
+        "Given the following user question, context information, corresponding SQL query, "
         "and SQL result, answer the user question.\n\n"
         f'Question: {conv["question"]}\n'
+        # f'Context: {conv.get("rag_result", "No guidelines provided.")}\n'
         f'SQL Query: {query_data["query"]}\n'
         f'SQL Result: {query_data["result"]}'  
         # f'Question: {state["question"]}\n'
         # f'SQL Query: {state["query"]}\n'
         # f'SQL Result: {state["result"]}'        
     )
-    response = local_llm.invoke(prompt)
+    response = llm.invoke(prompt)
     conv["answer"] = response.content
     state["conversation"] = conv
     return state
