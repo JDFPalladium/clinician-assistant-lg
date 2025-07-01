@@ -27,18 +27,5 @@ class AppState(TypedDict):
     messages: Annotated[list[AnyMessage], add_messages]
     question: str
     rag_result: str
-    query: str
-    result: str
     answer: str
     pk_hash: str
-
-# initialize state with patient pk hash
-# input_state:State = {
-#     "messages": [HumanMessage(content="was this person typically late or on time to their visits?")],
-#     "question": "",
-#     "rag_result": "",
-#     "query": "",
-#     "result": "",
-#     "answer": "",
-#     "pk_hash": "962885FEADB7CCF19A2CC506D39818EC448D5396C4D1AEFDC59873090C7FBF73"
-# }
