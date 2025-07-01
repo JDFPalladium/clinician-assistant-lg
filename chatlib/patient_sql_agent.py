@@ -6,7 +6,7 @@ from langchain_openai import ChatOpenAI
 from typing_extensions import TypedDict, Annotated
 
 
-from .state_types import AppState, SqlChainOutputModel
+from .state_types import AppState
 
 db = SQLDatabase.from_uri("sqlite:///data/patient_demonstration.sqlite")
 llm = ChatOpenAI(temperature = 0.0, model="gpt-4o")
@@ -18,18 +18,34 @@ llm = ChatOpenAI(temperature = 0.0, model="gpt-4o")
 system_message = """
 Given an input question, create a syntactically correct {dialect} query to
 run to help find the answer. For context, the database contains information about
-patients' demographics, their clinical visits, and their lab tests and their pharmacy pickups.
-Unless the user specifies in his question a
-specific number of examples they wish to obtain, always limit your query to
-at most {top_k} results. Filter PatientPKHash column using exactly the provided value: {pk_hash} if the value is provided
+patients' demographics, their clinical visits, their lab tests and their pharmacy pickups.
+
+If provided, shape the query based on the following authoriative context from HIV clinical guidelines:
+{guidelines}.
+
+Filter PatientPKHash column using exactly the provided value: {pk_hash} if the value is provided
 to get information about the patient with whom the clinician is meeting. 
 
 Never query for all the columns from a specific table, only ask for a the
-few relevant columns given the question.
+few relevant columns given the question. Use LIMIT 10 unless otherwise specified.
 
 Pay attention to use only the column names that you can see in the schema
 description. Be careful to not query for columns that do not exist. Also,
-pay attention to which column is in which table.
+pay attention to which column is in which table. Do not join or select from any tables not listed above. 
+Do not select columns not listed in the schema.
+
+When looking for a patient's regimen information, use CurrentRegimen from clinical_visits table to see
+what regimen they are on and join with the pharmacy table for other regimen details, including regimen line
+and regimen switch.
+
+Here's an example of how to do this in SQL:
+SELECT r.CurrentRegimen, p.RegimenChangedSwitched, p.RegimenChangeSwitchedReason
+FROM pharmacy p
+JOIN regimen r ON p.PatientPKHash = r.PatientPKHash
+WHERE p.PatientPKHash = '{pk_hash}'
+ORDER BY p.DispenseDate DESC
+LIMIT 10;
+
 
 When checking if a patient was late for an appointment, for each visit, compare the NextAppointmentDate from the previous visit to the VisitDate of the current visit.
 Do not compare NextAppointmentDate to the VisitDate in the same row. Use SQL to find, for each patient, the next VisitDate after a given VisitDate, and compare it to the NextAppointmentDate from the previous visit.
@@ -74,35 +90,30 @@ class QueryOutput(TypedDict):
 
 def write_query(state:AppState) -> AppState:
     """Generate SQL query to fetch information."""
-    conv = state["conversation"]
-    query_data = state["query_data"]
 
     prompt = query_prompt_template.invoke(
         {
             "dialect": db.dialect,
-            "top_k": 10,
+            # "top_k": 10,
             "table_info": db.get_table_info(),
-            "input": conv["question"],
-            # "guidelines": conv.get("rag_result", "No guidelines provided."),
-            "pk_hash": conv.get("pk_hash", "")
-            # "input": state["question"],
-            # "pk_hash": state["pk_hash"]
+            "input": state["question"],
+            "guidelines": state.get("rag_result", "No guidelines provided."),
+            "pk_hash": state.get("pk_hash", "")
         }
     )
 
     structured_llm = llm.with_structured_output(QueryOutput)
     result = structured_llm.invoke(prompt)
-    query_data["query"] = result["query"]
-    state["query_data"] = query_data
+    # query_data["query"] = result["query"]
+    state["query"] = result["query"]
     return state
     # return {**state, "query": result["query"]}
 
 def execute_query(state:AppState) -> AppState:
     """Execute SQL query."""
-    query_data = state["query_data"]
+
     execute_query_tool = QuerySQLDatabaseTool(db=db)
-    query_data["result"] = execute_query_tool.invoke(query_data["query"])
-    state["query_data"] = query_data
+    state["result"] = execute_query_tool.invoke(state["query"])
     return state
     # return {**state, "result": execute_query_tool.invoke(state["query"])}
 
@@ -116,23 +127,20 @@ def generate_answer(state:AppState) -> AppState:
     2023-01-15 to determine if the patient came on time.
     
     """
-    conv = state["conversation"]
-    query_data = state["query_data"]
 
     prompt = (
         "Given the following user question, context information, corresponding SQL query, "
         "and SQL result, answer the user question.\n\n"
-        f'Question: {conv["question"]}\n'
-        # f'Context: {conv.get("rag_result", "No guidelines provided.")}\n'
-        f'SQL Query: {query_data["query"]}\n'
-        f'SQL Result: {query_data["result"]}'  
+        f'Question: {state["question"]}\n'
+        f'Context: {state.get("rag_result", "No guidelines provided.")}\n'
+        f'SQL Query: {state["query"]}\n'
+        f'SQL Result: {state["result"]}'  
         # f'Question: {state["question"]}\n'
         # f'SQL Query: {state["query"]}\n'
         # f'SQL Result: {state["result"]}'        
     )
     response = llm.invoke(prompt)
-    conv["answer"] = response.content
-    state["conversation"] = conv
+    state["answer"] = response.content
     return state
     # return {**state, "answer": response.content}
 
@@ -147,17 +155,6 @@ def sql_chain(state:AppState) -> dict:
     """
     state = write_query(state)
     state = execute_query(state)
-    print(state['query_data']['query'])
-    print(state['query_data']['result'])
     state = generate_answer(state)
-    print(state['conversation']['answer'])
 
-    # Prepare output dict with only messages and conversation
-    output = {
-        "messages": state["messages"],
-        "conversation": state["conversation"],
-    }
-
-    return output
-
-    # return state
+    return state

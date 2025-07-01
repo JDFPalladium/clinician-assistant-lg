@@ -52,8 +52,8 @@ sys_msg = SystemMessage(content="""
 
 # Assistant Node
 def assistant(state: AppState) -> AppState:
-    conv = state["conversation"]
-    pk_hash = conv.get("pk_hash", None)
+
+    pk_hash = state.get("pk_hash", None)
 
     if pk_hash:
         pk_msg = SystemMessage(content=f"The patient identifier (pk_hash) is: {pk_hash}")
@@ -72,8 +72,7 @@ def assistant(state: AppState) -> AppState:
             break
 
     state['messages'] = state['messages'] + [new_message]
-    conv['question'] = latest_question
-    state['conversation'] = conv
+    state['question'] = latest_question
     return state
     # return {**state, "messages": state['messages'] + [new_message], "question": latest_question}
 
@@ -93,19 +92,17 @@ react_graph = builder.compile(checkpointer=memory)
 # Specify a thread
 config = {"configurable": {"thread_id": "25"}}
 
-input_state: AppState = {
-    "messages": [HumanMessage(content="when should this patient have their next viral load taken?")],
-    "conversation": {
-        "question": "",
-        "answer": "",
-        "rag_result": "",
-        "pk_hash": "962885FEADB7CCF19A2CC506D39818EC448D5396C4D1AEFDC59873090C7FBF73",
-    },
-    "query_data": {
-        "query": "",
-        "result": None,
-    },
+# initialize state with patient pk hash
+input_state:AppState = {
+    "messages": [HumanMessage(content="my patient is complaining about feeling headaches. should i consider switching their regimen?")],
+    "question": "",
+    "rag_result": "",
+    "query": "",
+    "result": "",
+    "answer": "",
+    "pk_hash": "962885FEADB7CCF19A2CC506D39818EC448D5396C4D1AEFDC59873090C7FBF73"
 }
+
 
 # messages = [HumanMessage(content="how many appointments has this patient had?")]
 message_output = react_graph.invoke(input_state, config)

@@ -14,12 +14,10 @@ def rag_retrieve(state:AppState) -> AppState:
     """Perform RAG search of repository containing authoritative information on HIV/AIDS in Kenya.
 
     """
-    conv = state["conversation"]
-    user_prompt = conv["question"]  # or whatever key holds the prompt
+    user_prompt = state["question"]  # or whatever key holds the prompt
     sources = retriever.retrieve(user_prompt)
     retrieved_text = "\n\n".join([f"Source {i+1}: {source.text}" for i, source in enumerate(sources)])
-    conv['rag_result'] = "RAG search results:" + retrieved_text
-    state["conversation"] = conv
+    state['rag_result'] = "RAG search results:" + retrieved_text
     return state
     # return {**state, "rag_result": "RAG search results for: " + retrieved_text}
 
