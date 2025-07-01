@@ -17,14 +17,31 @@ llm = ChatOpenAI(temperature = 0.0, model="gpt-4o")
 # setup template for sql query tool
 system_message = """
 Given an input question, create a syntactically correct {dialect} query to
-run to help find the answer. For context, the database contains information about
-patients' demographics, their clinical visits, their lab tests and their pharmacy pickups.
+run to help find the answer. The database contains the following tables and columns:
 
-If provided, shape the query based on the following authoriative context from HIV clinical guidelines:
-{guidelines}.
+table: clinical_visits
+columns: PatientPKHash, VisitDate, VisitType, VisitBy, NextAppointmentDate, TCAReason, Pregnant, Breastfeeding,
+    StabilityAssessment, DifferentiatedCare, WHOStage, WHOStagingOI, Height, Weight,
+    EMR, Project, Adherence, AdherenceCategory, BP, OI, OIDate, CurrentRegimen, AppointmentReminderWillingness
+
+table: lab
+columns: PatientPKHash, SiteCode, OrderedByDate, TestName, TestResult 
+
+table: pharmacy
+columns: PatientPKHash, SiteCode, DispenseDate, Drug, ExpectedReturn, Duration, TreatmentType,
+    RegimenLine, RegimenChangedSwitched, RegimenChangeSwitchedReason
+
+table: demographics
+columns: PatientPKHash, MFLCode, FacilityName, County, SubCounty, PartnerName, AgencyName, Sex,
+    MaritalStatus, EducationLevel, Occupation, OnIPT, AgeGroup, ARTOutcomeDescription, AsOfDate, LoadDate, StartARTDate, DOB
+
+To understand what each column means, refer to the following data dictionary: {table_info}.    
 
 Filter PatientPKHash column using exactly the provided value: {pk_hash} if the value is provided
 to get information about the patient with whom the clinician is meeting. 
+
+If provided, create the query based on the following authoriative context from HIV clinical guidelines:
+{guidelines}.
 
 Never query for all the columns from a specific table, only ask for a the
 few relevant columns given the question. Use LIMIT 10 unless otherwise specified.
@@ -71,9 +88,6 @@ WHERE v3.PatientPKHash = v1.PatientPKHash
     AND v3.VisitDate < v2.VisitDate
 )
 ORDER BY v1.PatientPKHash, v1.VisitDate;
-
-Only use the following tables:
-{table_info}
 """
 
 user_prompt = "Question: {input}"
@@ -95,7 +109,7 @@ def write_query(state:AppState) -> AppState:
         {
             "dialect": db.dialect,
             # "top_k": 10,
-            "table_info": db.get_table_info(),
+            "table_info": db.run("SELECT * FROM data_dictionary;"), #db.get_table_info(),
             "input": state["question"],
             "guidelines": state.get("rag_result", "No guidelines provided."),
             "pk_hash": state.get("pk_hash", "")
@@ -130,7 +144,8 @@ def generate_answer(state:AppState) -> AppState:
 
     prompt = (
         "Given the following user question, context information, corresponding SQL query, "
-        "and SQL result, answer the user question.\n\n"
+        "and SQL result, answer the user question. If the SQL result is empty, then the SQL query was not able to retrieve any information. " 
+        "In that case, ignore the SQL query too and generate an answer based only on the context. \n\n"
         f'Question: {state["question"]}\n'
         f'Context: {state.get("rag_result", "No guidelines provided.")}\n'
         f'SQL Query: {state["query"]}\n'
