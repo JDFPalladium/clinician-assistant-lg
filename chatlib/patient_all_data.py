@@ -147,7 +147,7 @@ def sql_chain(state: AppState) -> AppState:
         "patient clinical data, patient lab data, patient pharmacy data, "
         "patient demographic data, answer the user question. "
         "Try to answer based on the provided data."
-        "If there is essential patient information missing that you need in order to answer, "
+        "If there is essential patient information missing without which you cannot answer, "
         "do not provide an answer and instead explain what information is missing. \n\n"
         f'Question: {state["question"]}\n'
         f'Context: {state.get("rag_result", "No guidelines provided.")}\n'
