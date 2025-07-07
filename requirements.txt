@@ -17,3 +17,7 @@ black
 pytest
 dotenv
 gradio
+faiss-cpu
+tiktoken
+openai
+rapidfuzz

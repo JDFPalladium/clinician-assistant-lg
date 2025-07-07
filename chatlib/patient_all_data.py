@@ -4,6 +4,9 @@ import pandas as pd
 from langchain_openai import ChatOpenAI
 llm = ChatOpenAI(temperature = 0.0, model="gpt-4o")
 
+# from langchain_ollama.chat_models import ChatOllama
+# local_llm = ChatOllama(model="mistral:latest", temperature=0)
+
 from .state_types import AppState
 
 # Define the SQL query tool
@@ -57,6 +60,7 @@ def sql_chain(state: AppState) -> AppState:
         return "\n".join(summaries)
 
     visits_summary = summarize_visits(visits_data)
+
     print(visits_summary)
 
     cursor.execute("SELECT * FROM pharmacy WHERE PatientPKHash = :pk_hash", {"pk_hash": pk_hash})
@@ -83,6 +87,7 @@ def sql_chain(state: AppState) -> AppState:
         return "\n".join(summaries)
 
     pharmacy_summary = summarize_pharmacy(pharmacy_data)
+
     print(pharmacy_summary)
 
     cursor.execute("SELECT * FROM lab WHERE PatientPKHash = :pk_hash", {"pk_hash": pk_hash})
@@ -105,6 +110,7 @@ def sql_chain(state: AppState) -> AppState:
         return "\n".join(summaries)
 
     lab_summary = summarize_lab(lab_data)
+
     print(lab_summary)
 
     cursor.execute("SELECT * FROM demographics WHERE PatientPKHash = :pk_hash", {"pk_hash": pk_hash})
@@ -122,19 +128,18 @@ def sql_chain(state: AppState) -> AppState:
         
         row = df.iloc[0]
         summary = (
-            f"Sex: {safe(row['Sex'].values[0])}\n"
-            f"MaritalStatus: {safe(row['MaritalStatus'].values[0])}\n"
-            f"EducationLevel: {safe(row['EducationLevel'].values[0])}\n"
-            f"Occupation: {safe(row['Occupation'].values[0])}\n"
-            f"OnIPT: {safe(row['OnIPT'].values[0])}\n"
-            f"ARTOutcomeDescription: {safe(row['ARTOutcomeDescription'].values[0])}\n"
-            f"StartARTDate: {safe(row['StartARTDate'].values[0])}\n"
-            f"Date Of Birth: {safe(row['DOB'].values[0])}"
+            f"Sex: {safe(row['Sex'])}\n"
+            f"MaritalStatus: {safe(row['MaritalStatus'])}\n"
+            f"EducationLevel: {safe(row['EducationLevel'])}\n"
+            f"Occupation: {safe(row['Occupation'])}\n"
+            f"OnIPT: {safe(row['OnIPT'])}\n"
+            f"ARTOutcomeDescription: {safe(row['ARTOutcomeDescription'])}\n"
+            f"StartARTDate: {safe(row['StartARTDate'])}\n"
+            f"Date Of Birth: {safe(row['DOB'])}"
         )
         return summary
     
     demographic_summary = summarize_demographics(demographic_data)
-    print(demographic_summary)
 
     # cursor.execute("SELECT * FROM data_dictionary")
     # rows = cursor.fetchall()
@@ -143,20 +148,20 @@ def sql_chain(state: AppState) -> AppState:
     conn.close()
 
     prompt = (
-        "Given the following user question, contextual clinical guidance, "
-        "patient clinical data, patient lab data, patient pharmacy data, "
-        "patient demographic data, answer the user question. "
-        "Try to answer based on the provided data."
-        "If there is essential patient information missing without which you cannot answer, "
-        "do not provide an answer and instead explain what information is missing. \n\n"
-        f'Question: {state["question"]}\n'
-        f'Context: {state.get("rag_result", "No guidelines provided.")}\n'
-        f'Patient Clinical Visits: {visits_summary}\n'
-        f'Patient Pharmacy Data: {pharmacy_summary}\n'
-        f'Patient Lab Data: {lab_summary}\n'
-        f'Patient Demographic Data: {demographic_summary}\n'
-        # f'Data Dictionary: {data_dictionary}\n'
+        "You are a clinical assistant. Given the user question, clinical guideline context, "
+        "and summarized patient data below, answer the question accurately and concisely. "
+        "Only use the provided data; do not guess or hallucinate. "
+        "If essential patient information is missing, explain what is missing instead of guessing. "
+        "Please answer in no more than 100 words. \n\n"
+        f"Question: {state['question']}\n"
+        f"Guideline Context: {state.get('rag_result', 'No guidelines provided.')}\n"
+        f"Clinical Visits Summary:\n{visits_summary}\n"
+        f"Pharmacy Summary:\n{pharmacy_summary}\n"
+        f"Lab Summary:\n{lab_summary}\n"
+        f"Demographic Summary:\n{demographic_summary}\n"
     )
+    print("Prompt length (chars):", len(prompt))
+
     response = llm.invoke(prompt)
     state["answer"] = response.content
     return state

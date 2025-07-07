@@ -11,57 +11,55 @@ from langgraph.checkpoint.memory import MemorySaver
 # Initialize your graph and checkpointer once - eventually make this persistent
 memory = MemorySaver()
 
-import subprocess
-import socket
-
-def is_ollama_running(host="127.0.0.1", port=11434):
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-        return sock.connect_ex((host, port)) == 0
-
-if not is_ollama_running():
-    # Start ollama serve as a background process
-    subprocess.Popen(["ollama", "serve"])
-
 load_dotenv("config.env")
 os.environ.get("OPENAI_API_KEY")
 os.environ.get("LANGSMITH_API_KEY")
 
 from chatlib.state_types import AppState
 from chatlib.guidlines_rag_agent_li import rag_retrieve
-from chatlib.patient_sql_agent import sql_chain
+from chatlib.patient_all_data import sql_chain
+from chatlib.idsr_check import idsr_check
 
-tools = [rag_retrieve, sql_chain]
+tools = [rag_retrieve, sql_chain, idsr_check]
 llm = ChatOpenAI(temperature = 0.0, model="gpt-4o")
-llm_with_tools = llm.bind_tools([rag_retrieve, sql_chain])
+llm_with_tools = llm.bind_tools([rag_retrieve, sql_chain, idsr_check])
 
 # System message
 sys_msg = SystemMessage(content="""
-                        You are a helpful assistant tasked with helping clinicians
-                        meeting with patients. You have two tools available, 
-                        rag_retrieve to access information from HIV clinical guidelines,
-                        and sql_chain to access patient data. 
+You are a helpful assistant supporting clinicians during patient visits. You have three tools:
 
-                        In some cases, you may need to use both tools to answer a question.
-                        If you need to use both tools, first call rag_retrieve to get the relevant information,
-                        then call sql_chain to get the patient data, and finally combine the results
-                        to provide a complete answer. For example, if the question is about whether 
-                        a patient is on the correct treatment, you might first retrieve the treatment guidelines
-                        using rag_retrieve, then check the patient's treatment history using sql_chain.
+- rag_retrieve: to access HIV clinical guidelines
+- sql_chain: to query patient data from the SQL database
+- idsr_check: to check if the patient case description matches any known diseases
 
-                        You must respond only with a JSON object specifying the tool to call and its arguments.
-                        Do not generate any SQL queries, results or answers yourself. Only the sql_chain
-                        tool should do that.
-                        When calling a tool, provide only the necessary fields required for that tool to run.
-                        Do not include the full state or raw query results in the tool call arguments.
-                        For example, include the question and pk_hash, but exclude the query or result.
+There are three types of questions you may receive:
+1. Questions about patients (e.g., "When should this patient switch regimens?" or "What is their viral load history?")
+2. Questions about HIV clinical guidelines (e.g., "What are the latest guidelines for changing ART regimens?")
+3. Questions about disease identification based on patient case descriptions (e.g., "Should I be concerned about certain diseases with this patient?")
 
-                        """
-                        )
+When a clinician asks about patients, first use rag_retrieve to get relevant guideline context, then use sql_chain to query the patient's data, combining information as needed.
+
+When a clinician asks about guidelines, use rag_retrieve to provide the latest HIV clinical guidelines.
+
+When a clinician asks about disease identification, use idsr_check to match case descriptions against disease definitions.
+
+Respond only with a JSON object specifying the tool to call and its arguments, for example:
+{
+  "tool": "rag_retrieve",
+  "args": {"query": "latest ART regimen guidelines"}
+}
+
+Keep responses concise and focused. The clinician is a healthcare professional; do not suggest consulting one.
+
+If the clinician's question is unclear, ask for clarification.
+
+Do not include any text outside the JSON response.
+""")
 
 # Assistant Node
 def assistant(state: AppState) -> AppState:
-    conv = state["conversation"]
-    pk_hash = conv.get("pk_hash", None)
+
+    pk_hash = state.get("pk_hash", None)
 
     if pk_hash:
         pk_msg = SystemMessage(content=f"The patient identifier (pk_hash) is: {pk_hash}")
@@ -80,10 +78,8 @@ def assistant(state: AppState) -> AppState:
             break
 
     state['messages'] = state['messages'] + [new_message]
-    conv['question'] = latest_question
-    state['conversation'] = conv
+    state['question'] = latest_question
     return state
-    # return {**state, "messages": state['messages'] + [new_message], "question": latest_question}
 
 # Graph
 builder = StateGraph(AppState)
@@ -104,17 +100,13 @@ def chat_with_patient(question: str, pk_hash: str, thread_id: str = None):
         thread_id = str(uuid.uuid4())
 
     # Prepare input state with new user message and pk_hash
-    input_state: AppState = {
+    # initialize state with patient pk hash
+    input_state:AppState = {
         "messages": [HumanMessage(content=question)],
-        "conversation": {
-            "question": "",
-            "answer": "",
-            "pk_hash": pk_hash if pk_hash else None,
-        },
-        "query_data": {
-            "query": "",
-            "result": None,
-        }
+        "question": "",
+        "rag_result": "",
+        "answer": "",
+        "pk_hash": pk_hash
     }
 
     config = {"configurable": {"thread_id": thread_id, "user_id": thread_id}}
@@ -122,23 +114,36 @@ def chat_with_patient(question: str, pk_hash: str, thread_id: str = None):
     # Invoke the graph with persistent state
     output_state = react_graph.invoke(input_state, config)
 
+    for m in output_state['messages']:
+        m.pretty_print()
+
     # Extract assistant reply from messages
     assistant_message = output_state["messages"][-1].content
 
-    return assistant_message, thread_id
+    # extract message history for the thread
+    thread_messages = []
+    for msg in output_state['messages']:
+        if isinstance(msg, HumanMessage) or isinstance(msg, SystemMessage):
+            thread_messages.append({
+                "role": "user" if isinstance(msg, HumanMessage) else "system",
+                "content": msg.content
+            })
+
+    return assistant_message, thread_messages,  thread_id
 
 with gr.Blocks() as demo:
     question_input = gr.Textbox(label="Question")
     pk_hash_input = gr.Textbox(label="Patient pk_hash")
     thread_id_state = gr.State()  # to store thread_id between calls
     output_chat = gr.Textbox(label="Assistant Response")
+    output_message_history = gr.Textbox(label="Message History", max_lines=10)
 
     submit_btn = gr.Button("Ask")
 
     submit_btn.click(
         chat_with_patient,
         inputs=[question_input, pk_hash_input, thread_id_state],
-        outputs=[output_chat, thread_id_state],
+        outputs=[output_chat, output_message_history, thread_id_state],
     )
 
 demo.launch()

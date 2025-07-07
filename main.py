@@ -15,35 +15,47 @@ os.environ.get("LANGSMITH_API_KEY")
 from chatlib.state_types import AppState
 from chatlib.guidlines_rag_agent_li import rag_retrieve
 from chatlib.patient_all_data import sql_chain
+from chatlib.idsr_check import idsr_check
 
 # from langchain_ollama.chat_models import ChatOllama
 # llm = ChatOllama(model="mistral:latest", temperature=0)
 
-tools = [rag_retrieve, sql_chain]
+tools = [rag_retrieve, sql_chain, idsr_check]
 llm = ChatOpenAI(temperature = 0.0, model="gpt-4o")
-llm_with_tools = llm.bind_tools([rag_retrieve, sql_chain])
+llm_with_tools = llm.bind_tools([rag_retrieve, sql_chain, idsr_check])
 
 # System message
 sys_msg = SystemMessage(content="""
-                        You are a helpful assistant tasked with helping clinicians
-                        meeting with patients. You have two tools available, 
-                        rag_retrieve to access information from HIV clinical guidelines,
-                        and sql_chain to access patient data. When a clinican asks a question about a patient,
-                        you should first run rag_retrieve to get contextual information from the guidelines,
-                        then use sql_chain to query the patient's data from the SQL database.
+You are a helpful assistant supporting clinicians during patient visits. You have three tools:
 
-                        You must respond only with a JSON object specifying the tool to call and its arguments.
+- rag_retrieve: to access HIV clinical guidelines
+- sql_chain: to query patient data from the SQL database
+- idsr_check: to check if the patient case description matches any known diseases
 
-                        Keep your responses concise and focused on the task at hand. Remember, you are 
-                        talking to a clinician who needs quick and accurate information about their patient.
-                        Do not tell them to consult a healthcare professional - they are the healthcare professional.
-                        
-                        If the clinican questions is not clear, ask for clarification or more information.
-                        If the clinican asks a question that is not related to the patient, then use the rag_retrieve tool  
-                        to provide general information about HIV clinical guidelines.
+There are three types of questions you may receive:
+1. Questions about patients (e.g., "When should this patient switch regimens?" or "What is their viral load history?")
+2. Questions about HIV clinical guidelines (e.g., "What are the latest guidelines for changing ART regimens?")
+3. Questions about disease identification based on patient case descriptions (e.g., "Should I be concerned about certain diseases with this patient?")
 
-                        """
-                        )
+When a clinician asks about patients, first use rag_retrieve to get relevant guideline context, then use sql_chain to query the patient's data, combining information as needed.
+
+When a clinician asks about guidelines, use rag_retrieve to provide the latest HIV clinical guidelines.
+
+When a clinician asks about disease identification, use idsr_check to match case descriptions against disease definitions.
+
+Respond only with a JSON object specifying the tool to call and its arguments, for example:
+{
+  "tool": "rag_retrieve",
+  "args": {"query": "latest ART regimen guidelines"}
+}
+
+Keep responses concise and focused. The clinician is a healthcare professional; do not suggest consulting one.
+
+If the clinician's question is unclear, ask for clarification.
+
+Do not include any text outside the JSON response.
+""")
+
 
 # Assistant Node
 def assistant(state: AppState) -> AppState:
@@ -89,7 +101,7 @@ config = {"configurable": {"thread_id": "30"}}
 
 # initialize state with patient pk hash
 input_state:AppState = {
-    "messages": [HumanMessage(content="the patient is 30 and is not pregnant or breastfeeding?")],
+    "messages": [HumanMessage(content="i have 25 year old pregnant woman reporting vaginal bleeding, what should i look out for?")],
     "question": "",
     "rag_result": "",
     "answer": "",
