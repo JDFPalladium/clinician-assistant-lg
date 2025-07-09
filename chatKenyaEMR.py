@@ -4,9 +4,11 @@ from dotenv import load_dotenv
 import os
 from langchain_openai import ChatOpenAI
 from langgraph.graph import START, StateGraph
-from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
 from langgraph.prebuilt import tools_condition, ToolNode
 from langgraph.checkpoint.memory import MemorySaver
+
+
 
 # Initialize your graph and checkpointer once - eventually make this persistent
 memory = MemorySaver()
@@ -32,22 +34,13 @@ You are a helpful assistant supporting clinicians during patient visits. You hav
 - sql_chain: to query patient data from the SQL database
 - idsr_check: to check if the patient case description matches any known diseases
 
-There are three types of questions you may receive:
-1. Questions about patients (e.g., "When should this patient switch regimens?" or "What is their viral load history?")
-2. Questions about HIV clinical guidelines (e.g., "What are the latest guidelines for changing ART regimens?")
-3. Questions about disease identification based on patient case descriptions (e.g., "Should I be concerned about certain diseases with this patient?")
-
-When a clinician asks about patients, first use rag_retrieve to get relevant guideline context, then use sql_chain to query the patient's data, combining information as needed.
-
-When a clinician asks about guidelines, use rag_retrieve to provide the latest HIV clinical guidelines.
-
-When a clinician asks about disease identification, use idsr_check to match case descriptions against disease definitions.
-
-Respond only with a JSON object specifying the tool to call and its arguments, for example:
+When calling a tool, respond only with a JSON object specifying the tool to call and its minimal arguments, for example:
 {
-  "tool": "rag_retrieve",
-  "args": {"query": "latest ART regimen guidelines"}
+  "tool": "idsr_check",
+  "args": {"query": "patient vaginal bleeding"}
 }
+
+Do not pass the entire state as an argument.
 
 Keep responses concise and focused. The clinician is a healthcare professional; do not suggest consulting one.
 
@@ -58,37 +51,77 @@ Do not include any text outside the JSON response.
 
 # Assistant Node
 def assistant(state: AppState) -> AppState:
-
     pk_hash = state.get("pk_hash", None)
 
     if pk_hash:
         pk_msg = SystemMessage(content=f"The patient identifier (pk_hash) is: {pk_hash}")
-        messages = [sys_msg, pk_msg] + state["messages"]
+        messages = [sys_msg, pk_msg] + state.get("messages", [])
     else:
-        messages = [sys_msg] + state["messages"]
+        messages = [sys_msg] + state.get("messages", [])
 
-    # Get the LLM/tool response
-    new_message = llm_with_tools.invoke(messages)
-    # Extract the question from the latest HumanMessage, if present
-  
+    # Extract latest human question
     latest_question = ""
     for msg in reversed(messages):
         if isinstance(msg, HumanMessage):
             latest_question = msg.content
             break
 
-    state['messages'] = state['messages'] + [new_message]
-    state['question'] = latest_question
+    # Generate AIMessage only if answer is new
+    if "answer" in state and state["answer"]:
+        if state.get("last_answer") != state["answer"]:
+            last_tool = state.get("last_tool")
+
+            if last_tool == "idsr_check":
+                # Formatting instructions for idsr_check
+                format_instructions = """
+Please format the following medical assistant response exactly as:
+
+Likely matches:
+- Disease Name: [Likely] – Reason
+- Disease Name: [Probable] – Reason
+(Only include diseases that clearly fit based on the information.)
+
+If none:
+- No strong match found.
+
+Clarifying questions (optional, only if needed):
+- Question 1
+- Question 2
+
+At the end, always give a brief recommendation like:
+- Recommendation: "Suggest monitoring for the listed conditions." OR "No disease meets criteria based on current data — suggest gathering additional history on [x, y, z]."
+"""
+
+                # Combine formatting instructions with raw answer
+                prompt = f"{format_instructions}\n\nResponse:\n{state['answer']}"
+
+                # Call LLM to reformat the answer
+                llm_response = llm.invoke(prompt)
+                formatted_answer = llm_response.content.strip()
+
+                ai_message = AIMessage(content=formatted_answer)
+            else:
+                # For other tools, use the raw answer as is
+                ai_message = AIMessage(content=state["answer"])
+
+            messages = messages + [ai_message]
+            state["messages"] = messages
+            state["question"] = latest_question
+            state["last_answer"] = state["answer"]  # track processed answer
+            return state
+
+    # Otherwise, normal LLM with tools invocation
+    new_message = llm_with_tools.invoke(messages)
+    messages = messages + [new_message]
+    state["messages"] = messages
+    state["question"] = latest_question
     return state
+
 
 # Graph
 builder = StateGraph(AppState)
-
-# Define nodes: these do the work
 builder.add_node("assistant", assistant)
 builder.add_node("tools", ToolNode(tools))
-
-# Define edges: these determine how the control flow moves
 builder.add_edge(START, "assistant")
 builder.add_conditional_edges("assistant", tools_condition)
 builder.add_edge("tools", "assistant")
@@ -117,33 +150,23 @@ def chat_with_patient(question: str, pk_hash: str, thread_id: str = None):
     for m in output_state['messages']:
         m.pretty_print()
 
-    # Extract assistant reply from messages
+    # Extract the last AImessage 
     assistant_message = output_state["messages"][-1].content
 
-    # extract message history for the thread
-    thread_messages = []
-    for msg in output_state['messages']:
-        if isinstance(msg, HumanMessage) or isinstance(msg, SystemMessage):
-            thread_messages.append({
-                "role": "user" if isinstance(msg, HumanMessage) else "system",
-                "content": msg.content
-            })
-
-    return assistant_message, thread_messages,  thread_id
+    return assistant_message, thread_id
 
 with gr.Blocks() as demo:
     question_input = gr.Textbox(label="Question")
     pk_hash_input = gr.Textbox(label="Patient pk_hash")
     thread_id_state = gr.State()  # to store thread_id between calls
     output_chat = gr.Textbox(label="Assistant Response")
-    output_message_history = gr.Textbox(label="Message History", max_lines=10)
 
     submit_btn = gr.Button("Ask")
 
     submit_btn.click(
         chat_with_patient,
         inputs=[question_input, pk_hash_input, thread_id_state],
-        outputs=[output_chat, output_message_history, thread_id_state],
+        outputs=[output_chat, thread_id_state],
     )
 
 demo.launch()

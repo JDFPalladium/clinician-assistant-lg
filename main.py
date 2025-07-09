@@ -101,7 +101,7 @@ config = {"configurable": {"thread_id": "30"}}
 
 # initialize state with patient pk hash
 input_state:AppState = {
-    "messages": [HumanMessage(content="i have 25 year old pregnant woman reporting vaginal bleeding, what should i look out for?")],
+    "messages": [HumanMessage(content="summarize the patient's clinical visits")],
     "question": "",
     "rag_result": "",
     "answer": "",

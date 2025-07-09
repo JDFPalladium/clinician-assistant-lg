@@ -34,7 +34,6 @@ def rag_retrieve(state:AppState) -> AppState:
     state['rag_result'] = summary_response.content
 
     return state
-    # return {**state, "rag_result": "RAG search results for: " + retrieved_text}
 
 # if __name__ == "__main__":
 #     # Test the function

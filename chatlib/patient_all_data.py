@@ -9,8 +9,23 @@ llm = ChatOpenAI(temperature = 0.0, model="gpt-4o")
 
 from .state_types import AppState
 
+# define helper functions
+def safe(val):
+    if pd.isnull(val) or val in ("", "NULL"):
+        return 'missing'
+    return val
+
+# function to return only year of date
+def extract_year(date_str):
+    if pd.isnull(date_str) or date_str in ("", "NULL"):
+        return 'missing'
+    try:
+        return pd.to_datetime(date_str).year
+    except Exception as e:
+        return 'invalid date'
+
 # Define the SQL query tool
-def sql_chain(state: AppState) -> AppState:
+def sql_chain(query: str, rag_result: str, pk_hash: str) -> dict:
     """
     Annotated function that takes a patient identifer (pk_hash) and returns
     all data related to that patient from the SQL database.
@@ -26,10 +41,10 @@ def sql_chain(state: AppState) -> AppState:
     The answer will be generated based on the SQL query results and the context information.
     The function will return the updated state with the answer.
     """
-    pk_hash = state.get("pk_hash")
+
     if not pk_hash:
         raise ValueError("pk_hash is required in state for SQL queries.")
-    
+
     conn = sqlite3.connect('data/patient_demonstration.sqlite')
     cursor = conn.cursor() 
 
@@ -41,21 +56,18 @@ def sql_chain(state: AppState) -> AppState:
     def summarize_visits(df):
         if df.empty:
             return "No clinical visit data available."
-        
-        def safe(val):
-            if pd.isnull(val) or val in ("", "NULL"):
-                return 'missing'
-            return val
 
         summaries = []
-        for _, row in df.sort_values("VisitDate", ascending=False).head(5).iterrows():
-            summaries.append(f"- {row['VisitDate']}: WHO Stage {safe(row['WHOStage'])}, Weight {safe(row['Weight'])}kg, "
-                             f"NextAppointmentDate {safe(row['NextAppointmentDate'])}, VisityType {safe(row['VisitType'])}, "
-                             f"VisitBy {safe(row['VisitBy'])}, Pregnant {safe(row['Pregnant'])}, Breastfeeding {safe(row['Breastfeeding'])}, "
-                             f"WHOStage {safe(row['WHOStage'])}, StabilityAssessment {safe(row['StabilityAssessment'])}, "
-                             f"DifferentiatedCare {safe(row['DifferentiatedCare'])}, WHOStagingOI {safe(row['WHOStagingOI'])}, "
-                             f"Height {safe(row['Height'])}cm, Adherence {safe(row['Adherence'])}, BP {safe(row['BP'])}, "
-                             f"OI {safe(row['OI'])}, CurrentRegimen {safe(row['CurrentRegimen'])}"
+        summaries = []
+        for idx, (_, row) in enumerate(df.sort_values("VisitDate", ascending=False).head(5).iterrows(), start=1):
+            summaries.append(
+                f"Clinical Visit {idx} most recent, Year of visit {extract_year(row['VisitDate'])}: WHO Stage {safe(row['WHOStage'])}, Weight {safe(row['Weight'])}kg, "
+                f"NextAppointmentDate {extract_year(safe(row['NextAppointmentDate']))}, VisitType {safe(row['VisitType'])}, "
+                f"VisitBy {safe(row['VisitBy'])}, Pregnant {safe(row['Pregnant'])}, Breastfeeding {safe(row['Breastfeeding'])}, "
+                f"WHOStage {safe(row['WHOStage'])}, StabilityAssessment {safe(row['StabilityAssessment'])}, "
+                f"DifferentiatedCare {safe(row['DifferentiatedCare'])}, WHOStagingOI {safe(row['WHOStagingOI'])}, "
+                f"Height {safe(row['Height'])}cm, Adherence {safe(row['Adherence'])}, BP {safe(row['BP'])}, "
+                f"OI {safe(row['OI'])}, CurrentRegimen {safe(row['CurrentRegimen'])}"
             )
         return "\n".join(summaries)
 
@@ -70,15 +82,11 @@ def sql_chain(state: AppState) -> AppState:
     def summarize_pharmacy(df):
         if df.empty:
             return "No pharmacy data available."
-        
-        def safe(val):
-            if pd.isnull(val) or val in ("", "NULL"):
-                return 'missing'
-            return val
     
         summaries = []
-        for _, row in df.sort_values("DispenseDate", ascending=False).head(5).iterrows():
-            summaries.append(f"- {row['DispenseDate']}: ExpectedReturn {safe(row['ExpectedReturn'])}, Drug {safe(row['Drug'])}, "
+        for idx, (_, row) in enumerate(df.sort_values("DispenseDate", ascending=False).head(5).iterrows(), start=1):
+            summaries.append(f"Pharmacy Visit {idx} most recent, Year of visit {extract_year(row['DispenseDate'])}, "
+                             f"ExpectedReturn {extract_year(row['ExpectedReturn'])}, Drug {safe(row['Drug'])}, "
                              f"Duration {safe(row['Duration'])}, TreatmentType {safe(row['TreatmentType'])}, "
                              f"RegimenLine {safe(row['RegimenLine'])}, "
                              f"RegimenChangedSwitched {safe(row['RegimenChangedSwitched'])}, "
@@ -97,15 +105,10 @@ def sql_chain(state: AppState) -> AppState:
     def summarize_lab(df):
         if df.empty:
             return "No lab data available."
-        
-        def safe(val):
-            if pd.isnull(val) or val in ("", "NULL"):
-                return 'missing'
-            return val
     
         summaries = []
-        for _, row in df.sort_values("OrderedbyDate", ascending=False).head(5).iterrows():
-            summaries.append(f"- {row['OrderedbyDate']}: TestName {safe(row['TestName'])}, TestResult {safe(row['TestResult'])},"
+        for idx, (_, row) in enumerate(df.sort_values("OrderedbyDate", ascending=False).head(5).iterrows(), start=1):
+            summaries.append(f"Lab Test {idx} most recent, Year of test {extract_year(row['OrderedbyDate'])}. TestName {safe(row['TestName'])}, TestResult {safe(row['TestResult'])},"
             )
         return "\n".join(summaries)
 
@@ -121,11 +124,17 @@ def sql_chain(state: AppState) -> AppState:
         if df.empty:
             return "No demographic data available."
         
-        def safe(val):
-            if pd.isnull(val) or val in ("", "NULL"):
+        def calculate_age(dob):
+            if pd.isnull(dob) or dob in ("", "NULL"):
                 return 'missing'
-            return val
-        
+            try:
+                dob = pd.to_datetime(dob)
+                today = pd.to_datetime("today")
+                age = today.year - dob.year - ((today.month, today.day) < (dob.month, dob.day))
+                return age
+            except Exception as e:
+                return 'invalid date'
+
         row = df.iloc[0]
         summary = (
             f"Sex: {safe(row['Sex'])}\n"
@@ -135,7 +144,7 @@ def sql_chain(state: AppState) -> AppState:
             f"OnIPT: {safe(row['OnIPT'])}\n"
             f"ARTOutcomeDescription: {safe(row['ARTOutcomeDescription'])}\n"
             f"StartARTDate: {safe(row['StartARTDate'])}\n"
-            f"Date Of Birth: {safe(row['DOB'])}"
+            f"Age: {calculate_age(safe(row['DOB']))}"
         )
         return summary
     
@@ -153,8 +162,8 @@ def sql_chain(state: AppState) -> AppState:
         "Only use the provided data; do not guess or hallucinate. "
         "If essential patient information is missing, explain what is missing instead of guessing. "
         "Please answer in no more than 100 words. \n\n"
-        f"Question: {state['question']}\n"
-        f"Guideline Context: {state.get('rag_result', 'No guidelines provided.')}\n"
+        f"Question: {query}\n"
+        f"Guideline Context: {rag_result}\n"
         f"Clinical Visits Summary:\n{visits_summary}\n"
         f"Pharmacy Summary:\n{pharmacy_summary}\n"
         f"Lab Summary:\n{lab_summary}\n"
@@ -163,5 +172,8 @@ def sql_chain(state: AppState) -> AppState:
     print("Prompt length (chars):", len(prompt))
 
     response = llm.invoke(prompt)
-    state["answer"] = response.content
-    return state
+    answer_text = response.content
+    return {
+        "answer": answer_text,
+        "last_tool": "sql_chain"
+    }
