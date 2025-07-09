@@ -8,8 +8,6 @@ from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
 from langgraph.prebuilt import tools_condition, ToolNode
 from langgraph.checkpoint.memory import MemorySaver
 
-
-
 # Initialize your graph and checkpointer once - eventually make this persistent
 memory = MemorySaver()
 
@@ -22,6 +20,7 @@ from chatlib.guidlines_rag_agent_li import rag_retrieve
 from chatlib.patient_all_data import sql_chain
 from chatlib.idsr_check import idsr_check
 from chatlib.phi_filter import detect_and_redact_phi
+from chatlib.assistant_node import assistant
 
 tools = [rag_retrieve, sql_chain, idsr_check]
 llm = ChatOpenAI(temperature = 0.0, model="gpt-4o")
@@ -50,79 +49,12 @@ If the clinician's question is unclear, ask for clarification.
 Do not include any text outside the JSON response.
 """)
 
-# Assistant Node
-def assistant(state: AppState) -> AppState:
-    
-    pk_hash = state.get("pk_hash", None)
-
-    if pk_hash:
-        pk_msg = SystemMessage(content=f"The patient identifier (pk_hash) is: {pk_hash}")
-        messages = [sys_msg, pk_msg] + state.get("messages", [])
-    else:
-        messages = [sys_msg] + state.get("messages", [])
-
-    # Extract latest human question
-    latest_question = ""
-    for msg in reversed(messages):
-        if isinstance(msg, HumanMessage):
-            latest_question = msg.content
-            break
-
-    # Generate AIMessage only if answer is new
-    if "answer" in state and state["answer"]:
-        if state.get("last_answer") != state["answer"]:
-            last_tool = state.get("last_tool")
-
-            if last_tool == "idsr_check":
-                # Formatting instructions for idsr_check
-                format_instructions = """
-Please format the following medical assistant response exactly as:
-
-Likely matches:
-- Disease Name: [Likely] – Reason
-- Disease Name: [Probable] – Reason
-(Only include diseases that clearly fit based on the information.)
-
-If none:
-- No strong match found.
-
-Clarifying questions (optional, only if needed):
-- Question 1
-- Question 2
-
-At the end, always give a brief recommendation like:
-- Recommendation: "Suggest monitoring for the listed conditions." OR "No disease meets criteria based on current data — suggest gathering additional history on [x, y, z]."
-"""
-
-                # Combine formatting instructions with raw answer
-                prompt = f"{format_instructions}\n\nResponse:\n{state['answer']}"
-
-                # Call LLM to reformat the answer
-                llm_response = llm.invoke(prompt)
-                formatted_answer = llm_response.content.strip()
-
-                ai_message = AIMessage(content=formatted_answer)
-            else:
-                # For other tools, use the raw answer as is
-                ai_message = AIMessage(content=state["answer"])
-
-            messages = messages + [ai_message]
-            state["messages"] = messages
-            state["question"] = latest_question
-            state["last_answer"] = state["answer"]  # track processed answer
-            return state
-
-    # Otherwise, normal LLM with tools invocation
-    new_message = llm_with_tools.invoke(messages)
-    messages = messages + [new_message]
-    state["messages"] = messages
-    state["question"] = latest_question
-    return state
-
-
 # Graph
 builder = StateGraph(AppState)
-builder.add_node("assistant", assistant)
+builder.add_node(
+    "assistant",
+    lambda state: assistant(state, sys_msg, llm, llm_with_tools)
+)
 builder.add_node("tools", ToolNode(tools))
 builder.add_edge(START, "assistant")
 builder.add_conditional_edges("assistant", tools_condition)
