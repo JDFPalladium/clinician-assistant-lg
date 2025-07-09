@@ -21,6 +21,7 @@ from chatlib.state_types import AppState
 from chatlib.guidlines_rag_agent_li import rag_retrieve
 from chatlib.patient_all_data import sql_chain
 from chatlib.idsr_check import idsr_check
+from chatlib.phi_filter import detect_and_redact_phi
 
 tools = [rag_retrieve, sql_chain, idsr_check]
 llm = ChatOpenAI(temperature = 0.0, model="gpt-4o")
@@ -51,6 +52,7 @@ Do not include any text outside the JSON response.
 
 # Assistant Node
 def assistant(state: AppState) -> AppState:
+    
     pk_hash = state.get("pk_hash", None)
 
     if pk_hash:
@@ -127,19 +129,21 @@ builder.add_conditional_edges("assistant", tools_condition)
 builder.add_edge("tools", "assistant")
 react_graph = builder.compile(checkpointer=memory)
 
-def chat_with_patient(question: str, pk_hash: str, thread_id: str = None):
+def chat_with_patient(question: str, thread_id: str = None):
     # Generate or reuse thread_id for session persistence
     if thread_id is None or thread_id == "":
         thread_id = str(uuid.uuid4())
 
+    # Check input for PHI and redact if necessary
+    question = detect_and_redact_phi(question)["redacted_text"]
+    print(question)
     # Prepare input state with new user message and pk_hash
     # initialize state with patient pk hash
     input_state:AppState = {
         "messages": [HumanMessage(content=question)],
         "question": "",
         "rag_result": "",
-        "answer": "",
-        "pk_hash": pk_hash
+        "answer": ""
     }
 
     config = {"configurable": {"thread_id": thread_id, "user_id": thread_id}}
@@ -157,7 +161,6 @@ def chat_with_patient(question: str, pk_hash: str, thread_id: str = None):
 
 with gr.Blocks() as demo:
     question_input = gr.Textbox(label="Question")
-    pk_hash_input = gr.Textbox(label="Patient pk_hash")
     thread_id_state = gr.State()  # to store thread_id between calls
     output_chat = gr.Textbox(label="Assistant Response")
 
@@ -165,7 +168,7 @@ with gr.Blocks() as demo:
 
     submit_btn.click(
         chat_with_patient,
-        inputs=[question_input, pk_hash_input, thread_id_state],
+        inputs=[question_input, thread_id_state],
         outputs=[output_chat, thread_id_state],
     )
 

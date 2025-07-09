@@ -7,9 +7,6 @@ langchain-community
 langchain-core
 langchain-openai
 notebook
-tavily-python
-wikipedia
-trustcall
 langgraph-cli[inmem]
 llama_index==0.12.34
 pylint
@@ -20,4 +17,4 @@ gradio
 faiss-cpu
 tiktoken
 openai
-rapidfuzz
+dateparser

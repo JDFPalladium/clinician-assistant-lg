@@ -1,5 +1,6 @@
 import sqlite3
 import pandas as pd
+import os
 
 from langchain_openai import ChatOpenAI
 llm = ChatOpenAI(temperature = 0.0, model="gpt-4o")
@@ -25,7 +26,7 @@ def extract_year(date_str):
         return 'invalid date'
 
 # Define the SQL query tool
-def sql_chain(query: str, rag_result: str, pk_hash: str) -> dict:
+def sql_chain(query: str, rag_result: str) -> dict:
     """
     Annotated function that takes a patient identifer (pk_hash) and returns
     all data related to that patient from the SQL database.
@@ -41,7 +42,7 @@ def sql_chain(query: str, rag_result: str, pk_hash: str) -> dict:
     The answer will be generated based on the SQL query results and the context information.
     The function will return the updated state with the answer.
     """
-
+    pk_hash = os.environ.get("PK_HASH")
     if not pk_hash:
         raise ValueError("pk_hash is required in state for SQL queries.")
 
@@ -160,8 +161,7 @@ def sql_chain(query: str, rag_result: str, pk_hash: str) -> dict:
         "You are a clinical assistant. Given the user question, clinical guideline context, "
         "and summarized patient data below, answer the question accurately and concisely. "
         "Only use the provided data; do not guess or hallucinate. "
-        "If essential patient information is missing, explain what is missing instead of guessing. "
-        "Please answer in no more than 100 words. \n\n"
+        "If essential patient information is missing, explain what is missing instead of guessing. \n\n"
         f"Question: {query}\n"
         f"Guideline Context: {rag_result}\n"
         f"Clinical Visits Summary:\n{visits_summary}\n"

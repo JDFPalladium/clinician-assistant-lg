@@ -30,4 +30,4 @@ class AppState(TypedDict):
     answer: str
     last_answer: Optional[str] = None
     last_tool: Optional[str] = None
-    pk_hash: str
+
