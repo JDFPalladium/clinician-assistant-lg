@@ -23,7 +23,7 @@ def load_kenyan_names(filepath="data/kenyan_names.txt"):
         return set(line.strip().lower() for line in f if line.strip())
 
 kenyan_names = load_kenyan_names()
-print(kenyan_names)
+
 def name_list_detect(text):
     words = re.findall(r"\b\w+\b", text)
     matches = [w for w in words if w.lower() in kenyan_names]

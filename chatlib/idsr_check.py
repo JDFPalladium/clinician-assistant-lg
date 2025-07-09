@@ -4,7 +4,6 @@ from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from langchain_community.vectorstores import FAISS
 from langchain_core.documents import Document
 from langchain_core.tools import tool
-from langchain_community.chat_models import ChatOpenAI
 from langchain.prompts import PromptTemplate
 from langchain.chains import LLMChain
 from typing import List
@@ -14,8 +13,6 @@ from typing import List
 import string
 import json
 from langchain_core.messages import AIMessage
-
-llm = ChatOpenAI(temperature = 0.0, model="gpt-4o")
 
 ## Keywords
 # load keywords from file
@@ -66,7 +63,7 @@ def score_doc(doc, matched_keywords):
 class KeywordsOutput(BaseModel):
     keywords: List[str] = Field(description="List of relevant keywords extracted from the query")
 
-def extract_keywords_with_gpt(query: str, known_keywords: List[str]) -> List[str]:
+def extract_keywords_with_gpt(query: str, llm, known_keywords: List[str]) -> List[str]:
     parser = PydanticOutputParser(pydantic_object=KeywordsOutput)
 
     prompt = PromptTemplate(
@@ -98,13 +95,13 @@ Return the matching keywords as a JSON object with a single key "keywords" whose
 
 
 # function to perform hybrid search combining semantic search and keyword matching
-def hybrid_search_with_query_keywords(query, vectorstore, documents, keyword_list, top_k=5):
+def hybrid_search_with_query_keywords(query, vectorstore, documents, keyword_list, llm, top_k=5):
     
     # Step 1: Semantic search
     semantic_hits = vectorstore.similarity_search(query, k=top_k)
 
     # Step 2: Use GPT to extract keywords from the query
-    matched_keywords = extract_keywords_with_gpt(query, keyword_list)
+    matched_keywords = extract_keywords_with_gpt(query, llm, keyword_list)
 
     # print("Matched keywords:", matched_keywords)
 
@@ -141,8 +138,7 @@ def hybrid_search_with_query_keywords(query, vectorstore, documents, keyword_lis
     return list(merged.values())
 
 # Main function to perform the IDSR check
-@tool
-def idsr_check(query: str) -> AppState:
+def idsr_check(query: str, llm) -> AppState:
     """
     Perform hybrid search combining semantic search and keyword matching.
     
@@ -153,7 +149,7 @@ def idsr_check(query: str) -> AppState:
         AppState: Updated state with search results.
     """
     # Perform hybrid search
-    results = hybrid_search_with_query_keywords(query, vectorstore, tagged_documents, keywords)
+    results = hybrid_search_with_query_keywords(query, vectorstore, tagged_documents, keywords, llm)
     
     disease_definitions = "\n\n".join([f"{doc.metadata.get('disease_name', 'Unknown Disease')}:\n{doc.page_content}" for doc in results])  
 

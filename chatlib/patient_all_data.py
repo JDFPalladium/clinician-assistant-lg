@@ -2,12 +2,6 @@ import sqlite3
 import pandas as pd
 import os
 
-from langchain_openai import ChatOpenAI
-llm = ChatOpenAI(temperature = 0.0, model="gpt-4o")
-
-# from langchain_ollama.chat_models import ChatOllama
-# local_llm = ChatOllama(model="mistral:latest", temperature=0)
-
 from .state_types import AppState
 
 # define helper functions
@@ -26,7 +20,7 @@ def extract_year(date_str):
         return 'invalid date'
 
 # Define the SQL query tool
-def sql_chain(query: str, rag_result: str) -> dict:
+def sql_chain(query: str, llm, rag_result: str) -> dict:
     """
     Annotated function that takes a patient identifer (pk_hash) and returns
     all data related to that patient from the SQL database.

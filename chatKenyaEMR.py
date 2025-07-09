@@ -15,6 +15,8 @@ load_dotenv("config.env")
 os.environ.get("OPENAI_API_KEY")
 os.environ.get("LANGSMITH_API_KEY")
 
+llm = ChatOpenAI(temperature = 0.0, model="gpt-4o")
+
 from chatlib.state_types import AppState
 from chatlib.guidlines_rag_agent_li import rag_retrieve
 from chatlib.patient_all_data import sql_chain
@@ -22,9 +24,20 @@ from chatlib.idsr_check import idsr_check
 from chatlib.phi_filter import detect_and_redact_phi
 from chatlib.assistant_node import assistant
 
-tools = [rag_retrieve, sql_chain, idsr_check]
-llm = ChatOpenAI(temperature = 0.0, model="gpt-4o")
-llm_with_tools = llm.bind_tools([rag_retrieve, sql_chain, idsr_check])
+def rag_retrieve_tool(query):
+    """Retrieve relevant HIV clinical guidelines for the given query."""
+    return rag_retrieve(query, llm=llm)
+
+def sql_chain_tool(query, rag_result):
+    """Query patient data from the SQL database and summarize results."""
+    return sql_chain(query, rag_result, llm=llm)
+
+def idsr_check_tool(query):
+    """Check if the patient case description matches any known diseases."""
+    return idsr_check(query, llm=llm)
+
+tools = [rag_retrieve_tool, sql_chain_tool, idsr_check_tool]
+llm_with_tools = llm.bind_tools(tools)
 
 # System message
 sys_msg = SystemMessage(content="""

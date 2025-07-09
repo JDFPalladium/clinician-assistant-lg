@@ -1,8 +1,6 @@
 from llama_index.core import StorageContext, load_index_from_storage
 from langchain_core.tools import tool
 from .state_types import AppState
-from langchain_openai import ChatOpenAI
-llm = ChatOpenAI(temperature = 0.0, model="gpt-4o")
 
 # Load index for retrieval
 storage_context = StorageContext.from_defaults(persist_dir="arv_metadata")
@@ -11,8 +9,7 @@ retriever = index.as_retriever(similarity_top_k=3,
                                 # Similarity threshold for filtering
                                 similarity_threshold=0.5)
 
-@tool
-def rag_retrieve(state:AppState) -> AppState:
+def rag_retrieve(state:AppState, llm) -> AppState:
     """Perform RAG search of repository containing authoritative information on HIV/AIDS in Kenya.
 
     """
