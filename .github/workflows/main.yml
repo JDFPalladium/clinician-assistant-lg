@@ -30,35 +30,22 @@ jobs:
   push-to-huggingface:
     needs: lint-and-format
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v3
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
-
-      - name: Upgrade huggingface_hub
-        run: pip install --upgrade huggingface_hub
-
-      - name: Set up git for Hugging Face
-        run: |
-          git config --global user.email "actions@github.com"
-          git config --global user.name "GitHub Actions"
-
-      - name: Create Hugging Face Space (if needed)
-        env:
-          HF_TOKEN: ${{ secrets.HF_TOKEN }}
-        run: |
-          huggingface-cli repo create clinician-assistant-lg --type=space --space-sdk gradio --yes || true
+      - name: Install Git
+        run: sudo apt-get install git -y
 
       - name: Push to Hugging Face Space
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
-          git init
-          git remote add hf https://huggingface_hub:${HF_TOKEN}@huggingface.co/spaces/Nishauri/clinician-assistant-lg
+          git config --global user.email "actions@github.com"
+          git config --global user.name "Github Actions"
+          git clone https://huggingface.co/spaces/Nishauri/ClinicianAsssitant hf-space
+          rsync -av --exclude='.git' ./ hf-space/
+          cd hf-space
           git add .
-          git commit -m "Update Space" || echo "Nothing to commit"
-          git push hf main --force
+          git commit -m "Update Gradio app" || echo "No changes to commit"
+          git push https://$HF_TOKEN@huggingface.co/spaces/Nishauri/ClinicianAsssitant main
