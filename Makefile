@@ -10,3 +10,6 @@ test:
 
 format:
 	black app.py chatlib
+
+run:
+	python app.py
