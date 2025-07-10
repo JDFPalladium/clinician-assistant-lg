@@ -3,10 +3,10 @@ install:
 		pip install -r requirements.txt
 
 lint: 
-	pylint --disable=R,C 
+	pylint --disable=R,C app.py chatlib
 
 test:
 	PYTHONPATH=. pytest -vv 
 
 format:
-	black 
+	black app.py chatlib

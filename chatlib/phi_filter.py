@@ -6,14 +6,27 @@ from dateutil.relativedelta import relativedelta
 
 # List of words indicating relative dates (to filter out)
 RELATIVE_INDICATORS = [
-    "ago", "later", "before", "after", "yesterday", "tomorrow",
-    "today", "tonight", "last", "next", "this", "coming",
-    "previous", "past"
+    "ago",
+    "later",
+    "before",
+    "after",
+    "yesterday",
+    "tomorrow",
+    "today",
+    "tonight",
+    "last",
+    "next",
+    "this",
+    "coming",
+    "previous",
+    "past",
 ]
 
-def is_relative_date(text):
-    text_lower = text.lower()
+
+def is_relative_date(text_relative):
+    text_lower = text_relative.lower()
     return any(word in text_lower for word in RELATIVE_INDICATORS)
+
 
 # Load Kenyan names list (basic txt file, one name per line, all lowercase for comparison)
 def load_kenyan_names(filepath="data/kenyan_names.txt"):
@@ -22,19 +35,23 @@ def load_kenyan_names(filepath="data/kenyan_names.txt"):
     with open(filepath, "r", encoding="utf-8") as f:
         return set(line.strip().lower() for line in f if line.strip())
 
+
 kenyan_names = load_kenyan_names()
 
-def name_list_detect(text):
-    words = re.findall(r"\b\w+\b", text)
+
+def name_list_detect(text_names):
+    words = re.findall(r"\b\w+\b", text_names)
     matches = [w for w in words if w.lower() in kenyan_names]
     return matches
 
-def dateparser_detect(text):
-    results = dateparser.search.search_dates(text)
-    if not results:
+
+def dateparser_detect(text_dates):
+    results_date = dateparser.search.search_dates(text_dates, languages=["en"])
+    if not results_date:
         return []
-    filtered = [r for r in results if not is_relative_date(r[0])]
+    filtered = [r for r in results_date if not is_relative_date(r[0])]
     return filtered
+
 
 def describe_relative_date(dt, reference=None):
     if reference is None:
@@ -54,34 +71,36 @@ def describe_relative_date(dt, reference=None):
     else:
         return "today"
 
-def detect_and_redact_phi(text):
-    names_found = name_list_detect(text)
-    dates_found = dateparser_detect(text)
+
+def detect_and_redact_phi(text_input):
+    names_found = name_list_detect(text_input)
+    dates_found = dateparser_detect(text_input)
 
     phi_detected = bool(names_found or dates_found)
 
     # Redact dates with relative descriptions
     for match, dt in dates_found:
         relative = describe_relative_date(dt)
-        text = text.replace(match, relative)
+        text_input = text_input.replace(match, relative)
 
     # Redact Kenyan names
     for name in names_found:
         pattern = re.compile(rf"\b{name}\b", re.IGNORECASE)
-        text = pattern.sub("[name]", text)
+        text_input = pattern.sub("[name]", text_input)
 
     return {
         "phi_detected": phi_detected,
         "kenyan_name_matches": names_found,
         "dates": [d[0] for d in dates_found],
-        "redacted_text": text
+        "redacted_text": text_input,
     }
+
 
 if __name__ == "__main__":
     print("\n🔍 PHI Detection Tool (Kenyan context + redaction with relative dates)\n")
     while True:
         text = input("Enter clinical text (or 'q' to quit):\n> ")
-        if text.lower() == 'q':
+        if text.lower() == "q":
             break
         results = detect_and_redact_phi(text)
 

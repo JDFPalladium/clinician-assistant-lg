@@ -9,7 +9,7 @@ from typing_extensions import TypedDict, Annotated
 from .state_types import AppState
 
 db = SQLDatabase.from_uri("sqlite:///data/patient_demonstration.sqlite")
-llm = ChatOpenAI(temperature = 0.0, model="gpt-4o")
+llm = ChatOpenAI(temperature=0.0, model="gpt-4o")
 
 # from langchain_ollama.chat_models import ChatOllama
 # local_llm = ChatOllama(model="mistral:latest", temperature=0)
@@ -96,23 +96,26 @@ query_prompt_template = ChatPromptTemplate(
     [("system", system_message), ("user", user_prompt)]
 )
 
+
 class QueryOutput(TypedDict):
     """Generated SQL query."""
 
     query: Annotated[str, ..., "Syntactically valid SQL query."]
 
 
-def write_query(state:AppState) -> AppState:
+def write_query(state: AppState) -> AppState:
     """Generate SQL query to fetch information."""
 
     prompt = query_prompt_template.invoke(
         {
             "dialect": db.dialect,
             # "top_k": 10,
-            "table_info": db.run("SELECT * FROM data_dictionary;"), #db.get_table_info(),
+            "table_info": db.run(
+                "SELECT * FROM data_dictionary;"
+            ),  # db.get_table_info(),
             "input": state["question"],
             "guidelines": state.get("rag_result", "No guidelines provided."),
-            "pk_hash": state.get("pk_hash", "")
+            "pk_hash": state.get("pk_hash", ""),
         }
     )
 
@@ -123,7 +126,8 @@ def write_query(state:AppState) -> AppState:
     return state
     # return {**state, "query": result["query"]}
 
-def execute_query(state:AppState) -> AppState:
+
+def execute_query(state: AppState) -> AppState:
     """Execute SQL query."""
 
     execute_query_tool = QuerySQLDatabaseTool(db=db)
@@ -131,7 +135,8 @@ def execute_query(state:AppState) -> AppState:
     return state
     # return {**state, "result": execute_query_tool.invoke(state["query"])}
 
-def generate_answer(state:AppState) -> AppState:
+
+def generate_answer(state: AppState) -> AppState:
     """
     Answer question using retrieved information as context.
     For awareness, NextAppointmentDate is set during the VisitDate of the same entry.
@@ -139,29 +144,30 @@ def generate_answer(state:AppState) -> AppState:
     with the next recorded VisitDate. For example, if a patient has a VisitDate of
     2023-01-01 and a NextAppointmentDate of 2023-01-15, check if the next VisitDate is on or before
     2023-01-15 to determine if the patient came on time.
-    
+
     """
 
     prompt = (
         "Given the following user question, context information, corresponding SQL query, "
-        "and SQL result, answer the user question. If the SQL result is empty, then the SQL query was not able to retrieve any information. " 
+        "and SQL result, answer the user question. If the SQL result is empty, then the SQL query was not able to retrieve any information. "
         "In that case, ignore the SQL query too and generate an answer based only on the context. \n\n"
         f'Question: {state["question"]}\n'
         f'Context: {state.get("rag_result", "No guidelines provided.")}\n'
         f'SQL Query: {state["query"]}\n'
-        f'SQL Result: {state["result"]}'  
+        f'SQL Result: {state["result"]}'
         # f'Question: {state["question"]}\n'
         # f'SQL Query: {state["query"]}\n'
-        # f'SQL Result: {state["result"]}'        
+        # f'SQL Result: {state["result"]}'
     )
     response = llm.invoke(prompt)
     state["answer"] = response.content
     return state
     # return {**state, "answer": response.content}
 
+
 # now define a stateful tool that does the same thing
-@tool 
-def sql_chain(state:AppState) -> dict:
+@tool
+def sql_chain(state: AppState) -> dict:
     """
     Annotated function that takes a question string seeking information on patient data
     from a SQL database, writes an SQL query to retrieve relevant data, executes the query,

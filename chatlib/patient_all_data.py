@@ -2,22 +2,23 @@ import sqlite3
 import pandas as pd
 import os
 
-from .state_types import AppState
 
 # define helper functions
 def safe(val):
     if pd.isnull(val) or val in ("", "NULL"):
-        return 'missing'
+        return "missing"
     return val
+
 
 # function to return only year of date
 def extract_year(date_str):
     if pd.isnull(date_str) or date_str in ("", "NULL"):
-        return 'missing'
+        return "missing"
     try:
         return pd.to_datetime(date_str).year
-    except Exception as e:
-        return 'invalid date'
+    except (ValueError, TypeError):
+        return "invalid date"
+
 
 # Define the SQL query tool
 def sql_chain(query: str, llm, rag_result: str) -> dict:
@@ -40,23 +41,31 @@ def sql_chain(query: str, llm, rag_result: str) -> dict:
     if not pk_hash:
         raise ValueError("pk_hash is required in state for SQL queries.")
 
-    conn = sqlite3.connect('data/patient_demonstration.sqlite')
-    cursor = conn.cursor() 
+    conn = sqlite3.connect("data/patient_demonstration.sqlite")
+    cursor = conn.cursor()
 
     # Write the SQL query using the QuerySQLDatabaseTool
-    cursor.execute("SELECT * FROM clinical_visits WHERE PatientPKHash = :pk_hash", {"pk_hash": pk_hash})
+    cursor.execute(
+        "SELECT * FROM clinical_visits WHERE PatientPKHash = :pk_hash",
+        {"pk_hash": pk_hash},
+    )
     rows = cursor.fetchall()
-    visits_data = pd.DataFrame(rows, columns=[column[0] for column in cursor.description])
+    visits_data = pd.DataFrame(
+        rows, columns=[column[0] for column in cursor.description]
+    )
 
     def summarize_visits(df):
         if df.empty:
             return "No clinical visit data available."
 
         summaries = []
-        summaries = []
-        for idx, (_, row) in enumerate(df.sort_values("VisitDate", ascending=False).head(5).iterrows(), start=1):
+        ordinal_map = {1: "First", 2: "Second", 3: "Third", 4: "Fourth", 5: "Fifth"}
+        for idx, (_, row) in enumerate(
+            df.sort_values("VisitDate", ascending=False).head(5).iterrows(), start=1
+        ):
+            ordinal = ordinal_map.get(idx, f"{idx}th")
             summaries.append(
-                f"Clinical Visit {idx} most recent, Year of visit {extract_year(row['VisitDate'])}: WHO Stage {safe(row['WHOStage'])}, Weight {safe(row['Weight'])}kg, "
+                f"{ordinal} most recent clinical visit, Year of visit {extract_year(row['VisitDate'])}: WHO Stage {safe(row['WHOStage'])}, Weight {safe(row['Weight'])}kg, "
                 f"NextAppointmentDate {extract_year(safe(row['NextAppointmentDate']))}, VisitType {safe(row['VisitType'])}, "
                 f"VisitBy {safe(row['VisitBy'])}, Pregnant {safe(row['Pregnant'])}, Breastfeeding {safe(row['Breastfeeding'])}, "
                 f"WHOStage {safe(row['WHOStage'])}, StabilityAssessment {safe(row['StabilityAssessment'])}, "
@@ -68,67 +77,85 @@ def sql_chain(query: str, llm, rag_result: str) -> dict:
 
     visits_summary = summarize_visits(visits_data)
 
-    print(visits_summary)
-
-    cursor.execute("SELECT * FROM pharmacy WHERE PatientPKHash = :pk_hash", {"pk_hash": pk_hash})
+    cursor.execute(
+        "SELECT * FROM pharmacy WHERE PatientPKHash = :pk_hash", {"pk_hash": pk_hash}
+    )
     rows = cursor.fetchall()
-    pharmacy_data = pd.DataFrame(rows, columns=[column[0] for column in cursor.description])
+    pharmacy_data = pd.DataFrame(
+        rows, columns=[column[0] for column in cursor.description]
+    )
 
     def summarize_pharmacy(df):
         if df.empty:
             return "No pharmacy data available."
-    
+
         summaries = []
-        for idx, (_, row) in enumerate(df.sort_values("DispenseDate", ascending=False).head(5).iterrows(), start=1):
-            summaries.append(f"Pharmacy Visit {idx} most recent, Year of visit {extract_year(row['DispenseDate'])}, "
-                             f"ExpectedReturn {extract_year(row['ExpectedReturn'])}, Drug {safe(row['Drug'])}, "
-                             f"Duration {safe(row['Duration'])}, TreatmentType {safe(row['TreatmentType'])}, "
-                             f"RegimenLine {safe(row['RegimenLine'])}, "
-                             f"RegimenChangedSwitched {safe(row['RegimenChangedSwitched'])}, "
-                             f"RegimenChangeSwitchedReason {safe(row['RegimenChangeSwitchedReason'])}, "
+        ordinal_map = {1: "First", 2: "Second", 3: "Third", 4: "Fourth", 5: "Fifth"}
+        for idx, (_, row) in enumerate(
+            df.sort_values("DispenseDate", ascending=False).head(5).iterrows(), start=1
+        ):
+            ordinal = ordinal_map.get(idx, f"{idx}th")
+            summaries.append(
+                f"{ordinal} most recent pharmacy visit, Year of visit {extract_year(row['DispenseDate'])}, "
+                f"ExpectedReturn {extract_year(row['ExpectedReturn'])}, Drug {safe(row['Drug'])}, "
+                f"Duration {safe(row['Duration'])}, TreatmentType {safe(row['TreatmentType'])}, "
+                f"RegimenLine {safe(row['RegimenLine'])}, "
+                f"RegimenChangedSwitched {safe(row['RegimenChangedSwitched'])}, "
+                f"RegimenChangeSwitchedReason {safe(row['RegimenChangeSwitchedReason'])}, "
             )
         return "\n".join(summaries)
 
     pharmacy_summary = summarize_pharmacy(pharmacy_data)
 
-    print(pharmacy_summary)
-
-    cursor.execute("SELECT * FROM lab WHERE PatientPKHash = :pk_hash", {"pk_hash": pk_hash})
+    cursor.execute(
+        "SELECT * FROM lab WHERE PatientPKHash = :pk_hash", {"pk_hash": pk_hash}
+    )
     rows = cursor.fetchall()
     lab_data = pd.DataFrame(rows, columns=[column[0] for column in cursor.description])
 
     def summarize_lab(df):
         if df.empty:
             return "No lab data available."
-    
+
         summaries = []
-        for idx, (_, row) in enumerate(df.sort_values("OrderedbyDate", ascending=False).head(5).iterrows(), start=1):
-            summaries.append(f"Lab Test {idx} most recent, Year of test {extract_year(row['OrderedbyDate'])}. TestName {safe(row['TestName'])}, TestResult {safe(row['TestResult'])},"
+        ordinal_map = {1: "First", 2: "Second", 3: "Third", 4: "Fourth", 5: "Fifth"}
+        for idx, (_, row) in enumerate(
+            df.sort_values("OrderedbyDate", ascending=False).head(5).iterrows(), start=1
+        ):
+            summaries.append(
+                f"{ordinal_map.get(idx, idx)} most recent lab test, Year of test {extract_year(row['OrderedbyDate'])}. TestName {safe(row['TestName'])}, TestResult {safe(row['TestResult'])},"
             )
         return "\n".join(summaries)
 
     lab_summary = summarize_lab(lab_data)
 
-    print(lab_summary)
-
-    cursor.execute("SELECT * FROM demographics WHERE PatientPKHash = :pk_hash", {"pk_hash": pk_hash})
+    cursor.execute(
+        "SELECT * FROM demographics WHERE PatientPKHash = :pk_hash",
+        {"pk_hash": pk_hash},
+    )
     rows = cursor.fetchall()
-    demographic_data = pd.DataFrame(rows, columns=[column[0] for column in cursor.description])
+    demographic_data = pd.DataFrame(
+        rows, columns=[column[0] for column in cursor.description]
+    )
 
     def summarize_demographics(df):
         if df.empty:
             return "No demographic data available."
-        
+
         def calculate_age(dob):
             if pd.isnull(dob) or dob in ("", "NULL"):
-                return 'missing'
+                return "missing"
             try:
                 dob = pd.to_datetime(dob)
                 today = pd.to_datetime("today")
-                age = today.year - dob.year - ((today.month, today.day) < (dob.month, dob.day))
+                age = (
+                    today.year
+                    - dob.year
+                    - ((today.month, today.day) < (dob.month, dob.day))
+                )
                 return age
-            except Exception as e:
-                return 'invalid date'
+            except (ValueError, TypeError):
+                return "invalid date"
 
         row = df.iloc[0]
         summary = (
@@ -142,7 +169,7 @@ def sql_chain(query: str, llm, rag_result: str) -> dict:
             f"Age: {calculate_age(safe(row['DOB']))}"
         )
         return summary
-    
+
     demographic_summary = summarize_demographics(demographic_data)
 
     # cursor.execute("SELECT * FROM data_dictionary")
@@ -167,7 +194,4 @@ def sql_chain(query: str, llm, rag_result: str) -> dict:
 
     response = llm.invoke(prompt)
     answer_text = response.content
-    return {
-        "answer": answer_text,
-        "last_tool": "sql_chain"
-    }
+    return {"answer": answer_text, "last_tool": "sql_chain"}

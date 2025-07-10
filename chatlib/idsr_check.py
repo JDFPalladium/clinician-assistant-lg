@@ -1,31 +1,26 @@
-import time
 from .state_types import AppState
-from langchain_openai import ChatOpenAI, OpenAIEmbeddings
+from langchain_openai import OpenAIEmbeddings
 from langchain_community.vectorstores import FAISS
 from langchain_core.documents import Document
-from langchain_core.tools import tool
-from langchain.prompts import PromptTemplate
-from langchain.chains import LLMChain
+from langchain_core.prompts import ChatPromptTemplate
 from typing import List
 from pydantic import BaseModel, Field
 from langchain_core.output_parsers import PydanticOutputParser
-from typing import List
-import string
 import json
-from langchain_core.messages import AIMessage
+import math
+from collections import Counter
 
 ## Keywords
 # load keywords from file
 with open("./guidance_docs/idsr_keywords.txt", "r", encoding="utf-8") as f:
     keywords = [line.strip() for line in f if line.strip()]
 
-# # strip out the dashes in keywords
-# def normalize_kw(kw):
-#     return kw.lstrip("-• ").strip()
-# keywords = [normalize_kw(kw) for kw in keywords]
-
 # load vectorstore
-vectorstore = FAISS.load_local("./guidance_docs/disease_vectorstore", OpenAIEmbeddings(), allow_dangerous_deserialization=True)
+vectorstore = FAISS.load_local(
+    "./guidance_docs/disease_vectorstore",
+    OpenAIEmbeddings(),
+    allow_dangerous_deserialization=True,
+)
 
 # load tagged documents from JSON for keyword matching to document metadata
 with open("./guidance_docs/tagged_documents.json", "r", encoding="utf-8") as f:
@@ -34,8 +29,6 @@ with open("./guidance_docs/tagged_documents.json", "r", encoding="utf-8") as f:
 tagged_documents = [Document(**d) for d in doc_dicts]
 
 # Set up metrics for keywords
-from collections import Counter, defaultdict
-
 # Count how many documents each keyword appears in
 keyword_doc_counts = Counter()
 total_docs = len(tagged_documents)
@@ -45,29 +38,31 @@ for doc in tagged_documents:
     for kw in seen:
         keyword_doc_counts[kw] += 1
 
-import math
-
 # Use log-scaled inverse frequency to avoid extreme values
 keyword_weights = {
     kw: math.log(total_docs / (1 + count))  # add 1 to avoid div-by-zero
     for kw, count in keyword_doc_counts.items()
 }
 
-def score_doc(doc, matched_keywords):
-    doc_keywords = set(doc.metadata.get("matched_keywords", []))
+
+def score_doc(doc_to_score, matched_keywords):
+    doc_keywords = set(doc_to_score.metadata.get("matched_keywords", []))
     overlap = doc_keywords & set(matched_keywords)
     return sum(keyword_weights.get(kw, 0) for kw in overlap)
 
 
 ## Define helper functions
 class KeywordsOutput(BaseModel):
-    keywords: List[str] = Field(description="List of relevant keywords extracted from the query")
+    keywords: List[str] = Field(
+        description="List of relevant keywords extracted from the query"
+    )
+
 
 def extract_keywords_with_gpt(query: str, llm, known_keywords: List[str]) -> List[str]:
     parser = PydanticOutputParser(pydantic_object=KeywordsOutput)
 
-    prompt = PromptTemplate(
-        template="""
+    prompt = ChatPromptTemplate.from_template(
+        """
 You are helping identify relevant medical concepts. 
 Given this query: "{query}"
 
@@ -77,28 +72,31 @@ Select the most relevant 3-5 keywords from this list:
 Return the matching keywords as a JSON object with a single key "keywords" whose value is a list of strings.
 
 {format_instructions}
-""",
-        input_variables=["query", "keyword_list"],
-        partial_variables={"format_instructions": parser.get_format_instructions()},
+"""
     )
 
-    chain = LLMChain(
-        llm=ChatOpenAI(temperature=0, model="gpt-4o"),
-        prompt=prompt,
-        output_parser=parser,
-    )
+    # Compose the chain as a RunnableSequence: prompt -> llm -> parser
+    chain = prompt | llm | parser
 
-    output = chain.run(query=query, keyword_list=", ".join(known_keywords))
+    output = chain.invoke(
+        {
+            "query": query,
+            "keyword_list": ", ".join(known_keywords),
+            "format_instructions": parser.get_format_instructions(),
+        }
+    )
 
     # output is a list of strings, not a KeywordsOutput instance
     return output.keywords
 
 
 # function to perform hybrid search combining semantic search and keyword matching
-def hybrid_search_with_query_keywords(query, vectorstore, documents, keyword_list, llm, top_k=5):
-    
+def hybrid_search_with_query_keywords(
+    query, vstore, documents, keyword_list, llm, top_k=5
+):
+
     # Step 1: Semantic search
-    semantic_hits = vectorstore.similarity_search(query, k=top_k)
+    semantic_hits = vstore.similarity_search(query, k=top_k)
 
     # Step 2: Use GPT to extract keywords from the query
     matched_keywords = extract_keywords_with_gpt(query, llm, keyword_list)
@@ -107,7 +105,8 @@ def hybrid_search_with_query_keywords(query, vectorstore, documents, keyword_lis
 
     # Step 3: Filter docs whose metadata has any of those keywords
     keyword_hits = [
-        doc for doc in documents
+        doc
+        for doc in documents
         if any(
             kw1 == kw2
             for kw1 in doc.metadata.get("matched_keywords", [])
@@ -119,10 +118,13 @@ def hybrid_search_with_query_keywords(query, vectorstore, documents, keyword_lis
 
     # Step 4: Score keyword-matching documents by keyword rarity
     scored_docs = [
-        (doc, score_doc(doc, matched_keywords))  # original (unnormalized) list used for scoring
+        (
+            doc,
+            score_doc(doc, matched_keywords),
+        )  # original (unnormalized) list used for scoring
         for doc in keyword_hits
     ]
-    
+
     # # print doc metadata and scores
     # for doc, score in scored_docs:
     #     print(f"Document: {doc.metadata.get('disease_name', 'Unknown')}, Score: {score}")
@@ -137,21 +139,29 @@ def hybrid_search_with_query_keywords(query, vectorstore, documents, keyword_lis
     merged = {doc.page_content: doc for doc in semantic_hits + top_3_docs}
     return list(merged.values())
 
+
 # Main function to perform the IDSR check
 def idsr_check(query: str, llm) -> AppState:
     """
     Perform hybrid search combining semantic search and keyword matching.
-    
+
     Args:
         state (AppState): Application state containing the query.
-        
+
     Returns:
         AppState: Updated state with search results.
     """
     # Perform hybrid search
-    results = hybrid_search_with_query_keywords(query, vectorstore, tagged_documents, keywords, llm)
-    
-    disease_definitions = "\n\n".join([f"{doc.metadata.get('disease_name', 'Unknown Disease')}:\n{doc.page_content}" for doc in results])  
+    results = hybrid_search_with_query_keywords(
+        query, vectorstore, tagged_documents, keywords, llm
+    )
+
+    disease_definitions = "\n\n".join(
+        [
+            f"{doc.metadata.get('disease_name', 'Unknown Disease')}:\n{doc.page_content}"
+            for doc in results
+        ]
+    )
 
     # Prepare prompt for the LLM
     prompt = """
@@ -187,13 +197,16 @@ def idsr_check(query: str, llm) -> AppState:
 
     At the end, always give a brief recommendation like:
     - Recommendation: "Suggest monitoring for the listed conditions." OR "No disease meets criteria based on current data — suggest gathering additional history on [x, y, z]."
-    """.format(query=query, disease_definitions=disease_definitions)
-    
-    # Call the LLM to generate the answer, passing the case description and disease definitions
-    llm_response = llm.invoke(prompt)   
-    answer_text = llm_response.content.strip() if llm_response else "No relevant disease information found."
+    """.format(
+        query=query, disease_definitions=disease_definitions
+    )
 
-    return {
-        "answer": answer_text,
-        "last_tool": "idsr_check"
-    }
+    # Call the LLM to generate the answer, passing the case description and disease definitions
+    llm_response = llm.invoke(prompt)
+    answer_text = (
+        llm_response.content.strip()
+        if llm_response
+        else "No relevant disease information found."
+    )
+
+    return {"answer": answer_text, "last_tool": "idsr_check"}

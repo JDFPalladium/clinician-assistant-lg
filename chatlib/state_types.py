@@ -1,6 +1,5 @@
-from typing_extensions import TypedDict, Annotated, Optional
-from pydantic import BaseModel, Field
-from typing import List, Optional
+from typing_extensions import TypedDict, Annotated
+from typing import Optional
 from langchain_core.messages import AnyMessage
 from langgraph.graph.message import add_messages
 
@@ -23,6 +22,7 @@ from langgraph.graph.message import add_messages
 #     messages: List[AnyMessage] = Field(...)
 #     conversation: ConversationState = Field(...)
 
+
 class AppState(TypedDict):
     messages: Annotated[list[AnyMessage], add_messages]
     question: str
@@ -30,4 +30,4 @@ class AppState(TypedDict):
     answer: str
     last_answer: Optional[str] = None
     last_tool: Optional[str] = None
-
+    idsr_disclaimer: bool = False

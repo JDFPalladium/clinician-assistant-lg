@@ -1,13 +1,31 @@
 from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
 from chatlib.state_types import AppState
+from langchain_core.messages import ToolMessage
+import json
+
 
 # Assistant Node
 def assistant(state: AppState, sys_msg, llm, llm_with_tools) -> AppState:
-    
+
+    if state.get("messages") and isinstance(state["messages"][-1], ToolMessage):
+        tool_content = state["messages"][-1].content
+
+        if isinstance(tool_content, str):
+            try:
+                tool_content_dict = json.loads(tool_content)
+                state.update(tool_content_dict)
+                print("Merged tool content into state:", tool_content_dict)
+            except json.JSONDecodeError:
+                print("Failed to parse tool content as JSON")
+        elif isinstance(tool_content, dict):
+            state.update(tool_content)
+
     pk_hash = state.get("pk_hash", None)
 
     if pk_hash:
-        pk_msg = SystemMessage(content=f"The patient identifier (pk_hash) is: {pk_hash}")
+        pk_msg = SystemMessage(
+            content=f"The patient identifier (pk_hash) is: {pk_hash}"
+        )
         messages = [sys_msg, pk_msg] + state.get("messages", [])
     else:
         messages = [sys_msg] + state.get("messages", [])
@@ -25,13 +43,22 @@ def assistant(state: AppState, sys_msg, llm, llm_with_tools) -> AppState:
             last_tool = state.get("last_tool")
 
             if last_tool == "idsr_check":
-                # Formatting instructions for idsr_check
+                disclaimer_needed = not state.get("idsr_disclaimer_shown", False)
+                format_instructions = ""
+                if disclaimer_needed:
+                    format_instructions += (
+                        "Remind the clinician that this is not a diagnosis and that it is only\n"
+                        "identifying possible matches based for priority IDSR diseases for clinician awareness.\n\n"
+                    )
                 format_instructions = """
 Please format the following medical assistant response exactly as:
 
-Likely matches:
-- Disease Name: [Likely] – Reason
-- Disease Name: [Probable] – Reason
+Start with a reminder that this is not a diagnosis and that it is only
+identifying possible matches based for priority IDSR diseases for clinician awareness.
+
+Possible matches:
+- Disease Name: Reason
+- Disease Name: Reason
 (Only include diseases that clearly fit based on the information.)
 
 If none:
@@ -53,6 +80,10 @@ At the end, always give a brief recommendation like:
                 formatted_answer = llm_response.content.strip()
 
                 ai_message = AIMessage(content=formatted_answer)
+
+                # Set the flag so disclaimer is not shown again
+                state["idsr_disclaimer_shown"] = True
+
             else:
                 # For other tools, use the raw answer as is
                 ai_message = AIMessage(content=state["answer"])
