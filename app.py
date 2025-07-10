@@ -123,7 +123,7 @@ def chat_with_patient(question: str, thread_id: str = None):
     return assistant_message, thread_id
 
 
-with gr.Blocks() as demo:
+with gr.Blocks() as app:
     question_input = gr.Textbox(label="Question")
     thread_id_state = gr.State()  # to store thread_id between calls
     output_chat = gr.Textbox(label="Assistant Response")
@@ -136,4 +136,4 @@ with gr.Blocks() as demo:
         outputs=[output_chat, thread_id_state],
     )
 
-demo.launch()
+app.launch()
