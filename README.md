@@ -1,3 +1,13 @@
+---
+license: cc
+title: Clinician AI Assistant
+sdk: gradio
+emoji: 🏃
+colorFrom: green
+colorTo: blue
+pinned: true
+---
+
 # Clinician Assistant LG
 
 A conversational assistant designed to help clinicians in Kenya access patient data and clinical guidelines efficiently. This project uses LangChain, LangGraph, and OpenAI models to provide context-aware, tool-augmented chat for clinical decision support.
