@@ -43,9 +43,9 @@ jobs:
         run: |
           git config --global user.email "actions@github.com"
           git config --global user.name "Github Actions"
-          git clone https://huggingface.co/spaces/Nishauri/ClinicianAsssitant hf-space
+          git clone https://huggingface.co/spaces/Nishauri/ClinicianAsssistant hf-space
           rsync -av --exclude='.git' ./ hf-space/
           cd hf-space
           git add .
           git commit -m "Update Gradio app" || echo "No changes to commit"
-          git push https://$HF_TOKEN@huggingface.co/spaces/Nishauri/ClinicianAsssitant main
+          git push https://$HF_TOKEN@huggingface.co/spaces/Nishauri/ClinicianAsssistant main
