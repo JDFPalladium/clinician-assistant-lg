@@ -11,7 +11,8 @@ from langgraph.checkpoint.memory import MemorySaver
 # Initialize your graph and checkpointer once - eventually make this persistent
 memory = MemorySaver()
 
-load_dotenv("config.env")
+if os.path.exists("config.env"):
+    load_dotenv("config.env")
 os.environ.get("OPENAI_API_KEY")
 os.environ.get("LANGSMITH_API_KEY")
 
