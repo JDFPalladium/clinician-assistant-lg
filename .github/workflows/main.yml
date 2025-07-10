@@ -40,18 +40,8 @@ jobs:
         run: |
           git config --global user.email "actions@github.com"
           git config --global user.name "GitHub Actions"
-
-      - name: Commit any changes (if needed)
-        run: |
-          git add .
-          git commit -m "Update Gradio app" || echo "No changes to commit"
-
-      - name: Push to GitHub
-        run: |
-          git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/JDFPalladium/clinician-assistant-lg.git
-          git push origin main --force
-
+      
       - name: Push to Hugging Face
         run: |
-          git remote add hf https://username:${{ secrets.HF_TOKEN }}@huggingface.co/spaces/Nishauri/ClinicianAssistant || echo "remote already exists"
+          git remote add hf https://username:${{ secrets.HF_TOKEN }}@huggingface.co/spaces/Nishauri/ClinicianAssistant || echo "remote exists"
           git push hf main --force
