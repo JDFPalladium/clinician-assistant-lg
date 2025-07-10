@@ -48,5 +48,5 @@ jobs:
         run: |
           git config --global user.email "actions@github.com"
           git config --global user.name "GitHub Actions"
-          huggingface-cli repo create clinician-assistant-lg --type=space --yes || true
+          huggingface-cli repo create clinician-assistant-lg --type=space --space-sdk=gradio --yes || true
           huggingface-cli repo upload clinician-assistant-lg . --include="*" --token $HF_TOKEN --yes
