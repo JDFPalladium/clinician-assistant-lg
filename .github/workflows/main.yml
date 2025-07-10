@@ -39,14 +39,26 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: Install huggingface_hub
-        run: pip install huggingface_hub
+      - name: Upgrade huggingface_hub
+        run: pip install --upgrade huggingface_hub
 
-      - name: Push to Hugging Face Hub
-        env:
-          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+      - name: Set up git for Hugging Face
         run: |
           git config --global user.email "actions@github.com"
           git config --global user.name "GitHub Actions"
-          huggingface-cli repo create clinician-assistant-lg --type=space --space-sdk=gradio --yes || true
-          huggingface-cli repo upload clinician-assistant-lg . --include="*" --token $HF_TOKEN --yes
+
+      - name: Create Hugging Face Space (if needed)
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          huggingface-cli repo create clinician-assistant-lg --type=space --space-sdk gradio --yes || true
+
+      - name: Push to Hugging Face Space
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          git init
+          git remote add hf https://huggingface_hub:${HF_TOKEN}@huggingface.co/spaces/Nishauri/clinician-assistant-lg
+          git add .
+          git commit -m "Update Space" || echo "Nothing to commit"
+          git push hf main --force
