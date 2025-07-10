@@ -172,7 +172,7 @@ def idsr_check(query: str, llm) -> AppState:
     2. If a disease seems like a possible match based on the available information, list it and explain why.
     3. Only include rare diseases (e.g., eradicated or non-endemic to Kenya) if the match is extremely strong. Prioritize common and plausible conditions.
     4. If no disease clearly matches, say: "No strong match found."
-    5. If some critical information is missing, you may ask clarifying questions — but only once.
+    5. Ask clarifying questions if helpful to make better match suggestions.
     6. After asking clarifying questions, proceed with an assessment anyway based on what is already available.
 
     Case:
@@ -181,9 +181,10 @@ def idsr_check(query: str, llm) -> AppState:
     Diseases:
     {disease_definitions}
 
-    Your response should follow this format:
+    Your response should be brief and follow this format:
 
-    Likely matches:
+    If possible matches found:
+    Possible matches:
     - Disease Name: [Likely] – Reason
     - Disease Name: [Probable] – Reason
     (Only include diseases that clearly fit based on the information.)

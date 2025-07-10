@@ -14,7 +14,7 @@ def assistant(state: AppState, sys_msg, llm, llm_with_tools) -> AppState:
             try:
                 tool_content_dict = json.loads(tool_content)
                 state.update(tool_content_dict)
-                print("Merged tool content into state:", tool_content_dict)
+                # print("Merged tool content into state:", tool_content_dict)
             except json.JSONDecodeError:
                 print("Failed to parse tool content as JSON")
         elif isinstance(tool_content, dict):
@@ -41,40 +41,43 @@ def assistant(state: AppState, sys_msg, llm, llm_with_tools) -> AppState:
     if "answer" in state and state["answer"]:
         if state.get("last_answer") != state["answer"]:
             last_tool = state.get("last_tool")
-
+            
             if last_tool == "idsr_check":
+                
                 disclaimer_needed = not state.get("idsr_disclaimer_shown", False)
-                format_instructions = ""
-                if disclaimer_needed:
-                    format_instructions += (
-                        "Remind the clinician that this is not a diagnosis and that it is only\n"
-                        "identifying possible matches based for priority IDSR diseases for clinician awareness.\n\n"
-                    )
+                print(disclaimer_needed)
                 format_instructions = """
-Please format the following medical assistant response exactly as:
+                Please format the following medical assistant response exactly as:
 
-Start with a reminder that this is not a diagnosis and that it is only
-identifying possible matches based for priority IDSR diseases for clinician awareness.
+                {disclaimer}
 
-Possible matches:
-- Disease Name: Reason
-- Disease Name: Reason
-(Only include diseases that clearly fit based on the information.)
+                Possible matches:
+                - Disease Name: Reason
+                - Disease Name: Reason
+                (Only include diseases that clearly fit based on the information.)
 
-If none:
-- No strong match found.
+                If none:
+                - No strong match found.
 
-Clarifying questions (optional, only if needed):
-- Question 1
-- Question 2
+                Clarifying questions (optional, only if needed):
+                - Question 1
+                - Question 2
 
-At the end, always give a brief recommendation like:
-- Recommendation: "Suggest monitoring for the listed conditions." OR "No disease meets criteria based on current data — suggest gathering additional history on [x, y, z]."
-"""
+                At the end, always give a brief recommendation like:
+                - Recommendation: "Suggest monitoring for the listed conditions." OR "No disease meets criteria based on current data — suggest gathering additional history on [x, y, z]."
+                """
 
-                # Combine formatting instructions with raw answer
-                prompt = f"{format_instructions}\n\nResponse:\n{state['answer']}"
+                if disclaimer_needed:
+                    disclaimer_text = (
+                        "Disclaimer: This is not a diagnosis. This is meant to help\n"
+                        "identify possible matches based on priority IDSR diseases for clinician awareness.\n"
+                    )
+                    state["idsr_disclaimer_shown"] = True
+                else:
+                    disclaimer_text = ""
 
+                prompt = format_instructions.format(disclaimer=disclaimer_text) + f"\n\nResponse:\n{state['answer']}"
+                print("Prompt sent to LLM:\n", prompt)
                 # Call LLM to reformat the answer
                 llm_response = llm.invoke(prompt)
                 formatted_answer = llm_response.content.strip()
