@@ -14,7 +14,6 @@ memory = MemorySaver()
 if os.path.exists("config.env"):
     load_dotenv("config.env")
 os.environ.get("OPENAI_API_KEY")
-os.environ.get("LANGSMITH_API_KEY")
 
 llm = ChatOpenAI(temperature=0.0, model="gpt-4o")
 
