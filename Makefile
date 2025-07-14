@@ -12,7 +12,7 @@ else
 	RM := rm -rf
 endif
 
-.PHONY: venv install install-dev lint test format run clean
+.PHONY: venv install lint test format run clean
 
 venv:
 	uv venv $(VENV)

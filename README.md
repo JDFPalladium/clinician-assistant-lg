@@ -30,6 +30,8 @@ A conversational assistant designed to help clinicians in Kenya access patient d
 ```
 .
 ├── app.py                # Gradio web app entry point
+├── chat.py
+├── main.py
 ├── chatlib/              # Core logic, tools, and utilities
 │   ├── assistant_node.py
 │   ├── guidlines_rag_agent_li.py
@@ -39,9 +41,10 @@ A conversational assistant designed to help clinicians in Kenya access patient d
 │   ├── patient_sql_agent.py
 │   ├── phi_filter.py
 │   └── state_types.py
-├── requirements.txt      # Python dependencies
-├── Makefile              # Common dev commands (lint, test, format)
-└── README.md             # Project documentation
+├── Makefile              # Common dev commands (lint, test, format, install, run, clean)
+├── pyproject.toml      # Python dependencies
+├── README.md      # Project documentation
+└── uv.lock             
 ```
 
 ---
@@ -91,13 +94,18 @@ A conversational assistant designed to help clinicians in Kenya access patient d
 
 ## Requirements
 
-See `requirements.txt` for the full list. Key dependencies:
-- Python 3.10+
-- gradio
-- langchain_core, langchain_community, langchain_openai
-- langgraph
-- pandas
-- pydantic
+See `pyproject.toml` for the full list. Key dependencies:
+   - black>=25.1.0
+   - dateparser>=1.2.2
+   - faiss-cpu>=1.11.0
+   - gradio>=5.36.2
+   - langchain-community>=0.3.27
+   - langchain-openai>=0.3.27
+   - langgraph>=0.5.2
+   - llama-index>=0.12.48
+   - pandas>=2.3.1
+   - pylint>=3.3.7
+   - python-dotenv>=1.1.1
 
 ---
 
