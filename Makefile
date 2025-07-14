@@ -18,7 +18,7 @@ venv:
 	uv venv $(VENV)
 
 install: venv
-	$(VENV_BIN)/uv sync
+	uv sync --python $(PYTHON)
 
 lint: 
 	$(VENV_BIN)/pylint --disable=R,C app.py chatlib
