@@ -20,7 +20,7 @@ venv:
 install: venv
 	$(VENV_BIN)/uv sync
 
-lint:
+lint: 
 	$(VENV_BIN)/pylint --disable=R,C app.py chatlib
 
 test:
