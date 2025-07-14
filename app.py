@@ -8,7 +8,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.prebuilt import tools_condition, ToolNode
 from langgraph.checkpoint.memory import MemorySaver
 
-# Initialize your graph and checkpointer once - eventually make this persistent
+
 memory = MemorySaver()
 
 if os.path.exists("config.env"):
@@ -29,9 +29,7 @@ def rag_retrieve_tool(query):
     """Retrieve relevant HIV clinical guidelines for the given query."""
     result = rag_retrieve(query, llm=llm)
     return {
-        "rag_result": result.get(
-            "rag_result", ""
-        ),  # adjust based on your rag_retrieve output
+        "rag_result": result.get("rag_result", ""),
         "last_tool": "rag_retrieve",
     }
 
@@ -89,7 +87,7 @@ builder.add_edge("tools", "assistant")
 react_graph = builder.compile(checkpointer=memory)
 
 
-def chat_with_patient(question: str, thread_id: str = None):
+def chat_with_patient(question: str, thread_id: str = None):  # type: ignore
     # Generate or reuse thread_id for session persistence
     if thread_id is None or thread_id == "":
         thread_id = str(uuid.uuid4())
@@ -97,8 +95,7 @@ def chat_with_patient(question: str, thread_id: str = None):
     # Check input for PHI and redact if necessary
     question = detect_and_redact_phi(question)["redacted_text"]
     print(question)
-    # Prepare input state with new user message and pk_hash
-    # initialize state with patient pk hash
+
     input_state: AppState = {
         "messages": [HumanMessage(content=question)],
         "question": "",
@@ -111,13 +108,11 @@ def chat_with_patient(question: str, thread_id: str = None):
 
     config = {"configurable": {"thread_id": thread_id, "user_id": thread_id}}
 
-    # Invoke the graph with persistent state
-    output_state = react_graph.invoke(input_state, config)
+    output_state = react_graph.invoke(input_state, config)  # type: ignore
 
     for m in output_state["messages"]:
         m.pretty_print()
 
-    # Extract the last AImessage
     assistant_message = output_state["messages"][-1].content
 
     return assistant_message, thread_id
@@ -125,7 +120,7 @@ def chat_with_patient(question: str, thread_id: str = None):
 
 with gr.Blocks() as app:
     question_input = gr.Textbox(label="Question")
-    thread_id_state = gr.State()  # to store thread_id between calls
+    thread_id_state = gr.State()
     output_chat = gr.Textbox(label="Assistant Response")
 
     submit_btn = gr.Button("Ask")

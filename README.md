@@ -34,6 +34,7 @@ A conversational assistant designed to help clinicians in Kenya access patient d
 │   ├── assistant_node.py
 │   ├── guidlines_rag_agent_li.py
 │   ├── idsr_check.py
+│   ├── logger.py
 │   ├── patient_all_data.py
 │   ├── patient_sql_agent.py
 │   ├── phi_filter.py

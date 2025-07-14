@@ -4,7 +4,7 @@ import dateparser.search
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
 
-# List of words indicating relative dates (to filter out)
+
 RELATIVE_INDICATORS = [
     "ago",
     "later",
@@ -28,7 +28,6 @@ def is_relative_date(text_relative):
     return any(word in text_lower for word in RELATIVE_INDICATORS)
 
 
-# Load Kenyan names list (basic txt file, one name per line, all lowercase for comparison)
 def load_kenyan_names(filepath="data/kenyan_names.txt"):
     if not Path(filepath).exists():
         return set()
@@ -78,12 +77,10 @@ def detect_and_redact_phi(text_input):
 
     phi_detected = bool(names_found or dates_found)
 
-    # Redact dates with relative descriptions
     for match, dt in dates_found:
         relative = describe_relative_date(dt)
         text_input = text_input.replace(match, relative)
 
-    # Redact Kenyan names
     for name in names_found:
         pattern = re.compile(rf"\b{name}\b", re.IGNORECASE)
         text_input = pattern.sub("[name]", text_input)

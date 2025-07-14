@@ -3,14 +3,12 @@ import pandas as pd
 import os
 
 
-# define helper functions
 def safe(val):
     if pd.isnull(val) or val in ("", "NULL"):
         return "missing"
     return val
 
 
-# function to return only year of date
 def extract_year(date_str):
     if pd.isnull(date_str) or date_str in ("", "NULL"):
         return "missing"
@@ -20,7 +18,6 @@ def extract_year(date_str):
         return "invalid date"
 
 
-# Define the SQL query tool
 def sql_chain(query: str, llm, rag_result: str) -> dict:
     """
     Annotated function that takes a patient identifer (pk_hash) and returns
@@ -44,7 +41,6 @@ def sql_chain(query: str, llm, rag_result: str) -> dict:
     conn = sqlite3.connect("data/patient_demonstration.sqlite")
     cursor = conn.cursor()
 
-    # Write the SQL query using the QuerySQLDatabaseTool
     cursor.execute(
         "SELECT * FROM clinical_visits WHERE PatientPKHash = :pk_hash",
         {"pk_hash": pk_hash},
@@ -171,10 +167,6 @@ def sql_chain(query: str, llm, rag_result: str) -> dict:
         return summary
 
     demographic_summary = summarize_demographics(demographic_data)
-
-    # cursor.execute("SELECT * FROM data_dictionary")
-    # rows = cursor.fetchall()
-    # data_dictionary = pd.DataFrame(rows, columns=[column[0] for column in cursor.description])
 
     conn.close()
 

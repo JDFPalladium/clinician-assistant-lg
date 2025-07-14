@@ -4,7 +4,6 @@ from langchain_core.messages import ToolMessage
 import json
 
 
-# Assistant Node
 def assistant(state: AppState, sys_msg, llm, llm_with_tools) -> AppState:
 
     if state.get("messages") and isinstance(state["messages"][-1], ToolMessage):
@@ -14,11 +13,10 @@ def assistant(state: AppState, sys_msg, llm, llm_with_tools) -> AppState:
             try:
                 tool_content_dict = json.loads(tool_content)
                 state.update(tool_content_dict)
-                # print("Merged tool content into state:", tool_content_dict)
             except json.JSONDecodeError:
                 print("Failed to parse tool content as JSON")
         elif isinstance(tool_content, dict):
-            state.update(tool_content)
+            state.update(tool_content)  # type: ignore
 
     pk_hash = state.get("pk_hash", None)
 
@@ -30,20 +28,18 @@ def assistant(state: AppState, sys_msg, llm, llm_with_tools) -> AppState:
     else:
         messages = [sys_msg] + state.get("messages", [])
 
-    # Extract latest human question
     latest_question = ""
     for msg in reversed(messages):
         if isinstance(msg, HumanMessage):
             latest_question = msg.content
             break
 
-    # Generate AIMessage only if answer is new
     if "answer" in state and state["answer"]:
         if state.get("last_answer") != state["answer"]:
             last_tool = state.get("last_tool")
-            
+
             if last_tool == "idsr_check":
-                
+
                 disclaimer_needed = not state.get("idsr_disclaimer_shown", False)
                 print(disclaimer_needed)
                 format_instructions = """
@@ -72,20 +68,22 @@ def assistant(state: AppState, sys_msg, llm, llm_with_tools) -> AppState:
                         "Disclaimer: This is not a diagnosis. This is meant to help\n"
                         "identify possible matches based on priority IDSR diseases for clinician awareness.\n"
                     )
-                    state["idsr_disclaimer_shown"] = True
+                    state["idsr_disclaimer_shown"] = True  # type: ignore
                 else:
                     disclaimer_text = ""
 
-                prompt = format_instructions.format(disclaimer=disclaimer_text) + f"\n\nResponse:\n{state['answer']}"
+                prompt = (
+                    format_instructions.format(disclaimer=disclaimer_text)
+                    + f"\n\nResponse:\n{state['answer']}"
+                )
                 print("Prompt sent to LLM:\n", prompt)
-                # Call LLM to reformat the answer
+
                 llm_response = llm.invoke(prompt)
                 formatted_answer = llm_response.content.strip()
 
                 ai_message = AIMessage(content=formatted_answer)
 
-                # Set the flag so disclaimer is not shown again
-                state["idsr_disclaimer_shown"] = True
+                state["idsr_disclaimer_shown"] = True  # type: ignore
 
             else:
                 # For other tools, use the raw answer as is
@@ -93,13 +91,12 @@ def assistant(state: AppState, sys_msg, llm, llm_with_tools) -> AppState:
 
             messages = messages + [ai_message]
             state["messages"] = messages
-            state["question"] = latest_question
-            state["last_answer"] = state["answer"]  # track processed answer
+            state["question"] = latest_question  # type: ignore
+            state["last_answer"] = state["answer"]
             return state
 
-    # Otherwise, normal LLM with tools invocation
     new_message = llm_with_tools.invoke(messages)
     messages = messages + [new_message]
     state["messages"] = messages
-    state["question"] = latest_question
+    state["question"] = latest_question  # type: ignore
     return state
