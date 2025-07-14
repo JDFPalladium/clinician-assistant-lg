@@ -21,7 +21,7 @@ LOG_CONFIG = {
 _logger_cache = {}
 
 
-def get_logger(name: str = "text2sql-app") -> logging.Logger:
+def get_logger(name: str = "clinical-assistant") -> logging.Logger:
     """Get a configured logger instance with console and file handlers
 
     Args:
