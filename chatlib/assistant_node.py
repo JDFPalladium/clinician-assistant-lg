@@ -50,7 +50,7 @@ def assistant(state: AppState, sys_msg, llm, llm_with_tools) -> AppState:
                 data = json.loads(content) if isinstance(content, str) else content
                 state.update(data)
                 break  # only process the most recent ToolMessage
-            except Exception:
+            except json.JSONDecodeError:
                 break
 
 

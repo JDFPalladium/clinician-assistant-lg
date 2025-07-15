@@ -3,8 +3,8 @@ import uuid
 from dotenv import load_dotenv
 import os
 from langchain_openai import ChatOpenAI
-from langgraph.graph import START, StateGraph, MessagesState
-from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
+from langgraph.graph import START, StateGraph
+from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.prebuilt import tools_condition, ToolNode
 from langgraph.checkpoint.memory import MemorySaver
 # import sqlite3
