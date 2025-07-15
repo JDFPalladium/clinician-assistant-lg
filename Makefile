@@ -1,15 +1,39 @@
-install:
-	pip install --upgrade pip &&\
-		pip install -r requirements.txt
+SHELL := /bin/bash
+
+VENV := .venv
+
+ifeq ($(OS),Windows_NT)
+	VENV_BIN := $(VENV)/Scripts
+	PYTHON := $(VENV_BIN)/python.exe
+	RM := del /s /q
+else
+	VENV_BIN := $(VENV)/bin
+	PYTHON := $(VENV_BIN)/python
+	RM := rm -rf
+endif
+
+.PHONY: venv install lint test format run clean
+
+venv:
+	uv venv $(VENV)
+
+install: venv
+	uv sync --python $(PYTHON)
 
 lint: 
-	pylint --disable=R,C app.py chatlib
+	$(VENV_BIN)/pylint --disable=R,C app.py chatlib
 
 test:
-	PYTHONPATH=. pytest -vv 
+	PYTHONPATH=. $(VENV_BIN)/pytest -vv
 
 format:
-	black app.py chatlib
+	$(VENV_BIN)/black app.py chatlib
 
 run:
-	python app.py
+	$(PYTHON) app.py
+
+clean:
+	$(RM) $(VENV)
+	$(RM) .pytest_cache
+	$(RM) __pycache__
+	$(RM) .mypy_cache

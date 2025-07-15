@@ -1,26 +1,6 @@
-from typing_extensions import TypedDict, Annotated
-from typing import Optional
+from typing_extensions import TypedDict, Annotated, NotRequired
 from langchain_core.messages import AnyMessage
 from langgraph.graph.message import add_messages
-
-# class ConversationState(TypedDict):
-#     question: str
-#     answer: str
-#     rag_result: str
-#     pk_hash: Optional[str]
-
-# class QueryState(TypedDict):
-#     query: str
-#     result: Optional[str]
-
-# class AppState(TypedDict):
-#     messages: Annotated[list[AnyMessage], add_messages]
-#     conversation: ConversationState
-#     query_data: QueryState
-
-# class SqlChainOutputModel(BaseModel):
-#     messages: List[AnyMessage] = Field(...)
-#     conversation: ConversationState = Field(...)
 
 
 class AppState(TypedDict):

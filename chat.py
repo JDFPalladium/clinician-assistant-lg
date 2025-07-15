@@ -16,15 +16,13 @@ from chatlib.state_types import AppState
 from chatlib.guidlines_rag_agent_li import rag_retrieve
 from chatlib.patient_all_data import sql_chain
 from chatlib.idsr_check import idsr_check
-
-# from langchain_ollama.chat_models import ChatOllama
-# llm = ChatOllama(model="mistral:latest", temperature=0)
+from chatlib.logger import get_logger
 
 tools = [rag_retrieve, sql_chain, idsr_check]
 llm = ChatOpenAI(temperature = 0.0, model="gpt-4o")
 llm_with_tools = llm.bind_tools([rag_retrieve, sql_chain, idsr_check])
 
-# System message
+
 sys_msg = SystemMessage(content="""
 You are a helpful assistant supporting clinicians during patient visits. You have three tools:
 
@@ -57,7 +55,7 @@ Do not include any text outside the JSON response.
 """)
 
 
-# Assistant Node
+
 def assistant(state: AppState) -> AppState:
 
     pk_hash = state.get("pk_hash", None)
@@ -68,9 +66,8 @@ def assistant(state: AppState) -> AppState:
     else:
         messages = [sys_msg] + state["messages"]
 
-    # Get the LLM/tool response
     new_message = llm_with_tools.invoke(messages)
-    # Extract the question from the latest HumanMessage, if present
+    
   
     latest_question = ""
     for msg in reversed(messages):
@@ -78,39 +75,37 @@ def assistant(state: AppState) -> AppState:
             latest_question = msg.content
             break
 
-    state['messages'] = state['messages'] + [new_message]
-    state['question'] = latest_question
+    state['messages'] = state['messages'] + [new_message]  # type: ignore
+    state['question'] = latest_question # type: ignore
     return state
-    # return {**state, "messages": state['messages'] + [new_message], "question": latest_question}
 
 # Graph
 builder = StateGraph(AppState)
 
-# Define nodes: these do the work
+
 builder.add_node("assistant", assistant)
 builder.add_node("tools", ToolNode(tools))
 
-# Define edges: these determine how the control flow moves
+
 builder.add_edge(START, "assistant")
 builder.add_conditional_edges("assistant", tools_condition)
 builder.add_edge("tools", "assistant")
 react_graph = builder.compile(checkpointer=memory)
 
-# Specify a thread
+
 config = {"configurable": {"thread_id": "30"}}
 
-# initialize state with patient pk hash
+
 input_state:AppState = {
     "messages": [HumanMessage(content="summarize the patient's clinical visits")],
     "question": "",
     "rag_result": "",
     "answer": "",
-    "pk_hash": "962885FEADB7CCF19A2CC506D39818EC448D5396C4D1AEFDC59873090C7FBF73"
+    "pk_hash": "962885FEADB7CCF19A2CC506D39818EC448D5396C4D1AEFDC59873090C7FBF73" # type: ignore
 }
 
 
-# messages = [HumanMessage(content="how many appointments has this patient had?")]
-message_output = react_graph.invoke(input_state, config)
+message_output = react_graph.invoke(input_state, config) # type: ignore
 
 for m in message_output['messages']:
     m.pretty_print()

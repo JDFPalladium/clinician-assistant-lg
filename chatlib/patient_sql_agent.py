@@ -11,10 +11,7 @@ from .state_types import AppState
 db = SQLDatabase.from_uri("sqlite:///data/patient_demonstration.sqlite")
 llm = ChatOpenAI(temperature=0.0, model="gpt-4o")
 
-# from langchain_ollama.chat_models import ChatOllama
-# local_llm = ChatOllama(model="mistral:latest", temperature=0)
 
-# setup template for sql query tool
 system_message = """
 Given an input question, create a syntactically correct {dialect} query to
 run to help find the answer. The database contains the following tables and columns:
@@ -109,10 +106,7 @@ def write_query(state: AppState) -> AppState:
     prompt = query_prompt_template.invoke(
         {
             "dialect": db.dialect,
-            # "top_k": 10,
-            "table_info": db.run(
-                "SELECT * FROM data_dictionary;"
-            ),  # db.get_table_info(),
+            "table_info": db.run("SELECT * FROM data_dictionary;"),
             "input": state["question"],
             "guidelines": state.get("rag_result", "No guidelines provided."),
             "pk_hash": state.get("pk_hash", ""),
@@ -121,19 +115,16 @@ def write_query(state: AppState) -> AppState:
 
     structured_llm = llm.with_structured_output(QueryOutput)
     result = structured_llm.invoke(prompt)
-    # query_data["query"] = result["query"]
-    state["query"] = result["query"]
+    state["query"] = result["query"]  # type: ignore
     return state
-    # return {**state, "query": result["query"]}
 
 
 def execute_query(state: AppState) -> AppState:
     """Execute SQL query."""
 
     execute_query_tool = QuerySQLDatabaseTool(db=db)
-    state["result"] = execute_query_tool.invoke(state["query"])
+    state["result"] = execute_query_tool.invoke(state["query"])  # type: ignore
     return state
-    # return {**state, "result": execute_query_tool.invoke(state["query"])}
 
 
 def generate_answer(state: AppState) -> AppState:
@@ -153,19 +144,14 @@ def generate_answer(state: AppState) -> AppState:
         "In that case, ignore the SQL query too and generate an answer based only on the context. \n\n"
         f'Question: {state["question"]}\n'
         f'Context: {state.get("rag_result", "No guidelines provided.")}\n'
-        f'SQL Query: {state["query"]}\n'
-        f'SQL Result: {state["result"]}'
-        # f'Question: {state["question"]}\n'
-        # f'SQL Query: {state["query"]}\n'
-        # f'SQL Result: {state["result"]}'
+        f'SQL Query: {state["query"]}\n'  # type: ignore
+        f'SQL Result: {state["result"]}'  # type: ignore
     )
     response = llm.invoke(prompt)
-    state["answer"] = response.content
+    state["answer"] = response.content  # type: ignore
     return state
-    # return {**state, "answer": response.content}
 
 
-# now define a stateful tool that does the same thing
 @tool
 def sql_chain(state: AppState) -> dict:
     """
@@ -178,4 +164,4 @@ def sql_chain(state: AppState) -> dict:
     state = execute_query(state)
     state = generate_answer(state)
 
-    return state
+    return state  # type: ignore
