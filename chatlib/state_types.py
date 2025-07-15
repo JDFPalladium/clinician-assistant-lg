@@ -29,5 +29,7 @@ class AppState(TypedDict):
     rag_result: str
     answer: str
     last_answer: Optional[str] = None
+    last_user_message: Optional[str] = None
     last_tool: Optional[str] = None
-    idsr_disclaimer: bool = False
+    idsr_disclaimer_shown: bool = False
+    summary: Optional[str] = None

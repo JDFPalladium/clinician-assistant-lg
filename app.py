@@ -3,10 +3,21 @@ import uuid
 from dotenv import load_dotenv
 import os
 from langchain_openai import ChatOpenAI
-from langgraph.graph import START, StateGraph
-from langchain_core.messages import HumanMessage, SystemMessage
+from langgraph.graph import START, StateGraph, MessagesState
+from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
 from langgraph.prebuilt import tools_condition, ToolNode
 from langgraph.checkpoint.memory import MemorySaver
+# import sqlite3
+# from langgraph.checkpoint.sqlite import SqliteSaver
+
+# db_path = "state_db/example.db"
+# conn_memory = sqlite3.connect(db_path, check_same_thread=False)
+# memory = SqliteSaver(conn_memory)
+
+# class State(MessagesState):
+#     summary: str
+
+
 
 # Initialize your graph and checkpointer once - eventually make this persistent
 memory = MemorySaver()
@@ -23,6 +34,7 @@ from chatlib.patient_all_data import sql_chain
 from chatlib.idsr_check import idsr_check
 from chatlib.phi_filter import detect_and_redact_phi
 from chatlib.assistant_node import assistant
+# from chatlib.helpers import summarize_conversation, should_summarize
 
 
 def rag_retrieve_tool(query):
@@ -58,14 +70,16 @@ sys_msg = SystemMessage(
 You are a helpful assistant supporting clinicians during patient visits. You have three tools:
 
 - rag_retrieve: to access HIV clinical guidelines
-- sql_chain: to query patient data from the SQL database. When using this tool, always run rag_retrieve first to get context
+- sql_chain: to access HIV data about the patient with whom the clinician is meeting. When using this tool, always run rag_retrieve first to get context
 - idsr_check: to check if the patient case description matches any known diseases
 
-When calling a tool, respond only with a JSON object specifying the tool to call and its minimal arguments, for example:
+When a tool is needed, respond only with a JSON object specifying the tool to call and its minimal arguments, for example:
 {
   "tool": "idsr_check",
   "args": {"query": "patient vaginal bleeding"}
 }
+
+If no tool is needed, respond directly to the clinician's question in natural language.
 
 Do not pass the entire state as an argument.
 
@@ -80,6 +94,7 @@ If the question is outside your scope, respond with "I'm sorry, I cannot assist 
 Do not include any text outside the JSON response.
 """
 )
+
 
 # Graph
 builder = StateGraph(AppState)
@@ -100,7 +115,7 @@ def chat_with_patient(question: str, thread_id: str = None):
 
     # Check input for PHI and redact if necessary
     question = detect_and_redact_phi(question)["redacted_text"]
-    print(question)
+
     # Prepare input state with new user message and pk_hash
     # initialize state with patient pk hash
     input_state: AppState = {
@@ -109,8 +124,10 @@ def chat_with_patient(question: str, thread_id: str = None):
         "rag_result": "",
         "answer": "",
         "last_answer": "",
+        "last_user_message": "",
         "last_tool": None,
         "idsr_disclaimer": False,
+        "summary": None
     }
 
     config = {"configurable": {"thread_id": thread_id, "user_id": thread_id}}

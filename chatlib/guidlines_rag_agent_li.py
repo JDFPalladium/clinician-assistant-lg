@@ -29,7 +29,8 @@ def rag_retrieve(query: str, llm) -> AppState:
     # Call your LLM to generate the summary
     summary_response = llm.invoke(summarization_prompt)
 
-    return {"rag_result": summary_response.content, "last_tool": "rag_retrieve"}
+    return {"rag_result": summary_response.content,
+            "last_tool": "rag_retrieve"}
 
 
 # if __name__ == "__main__":
