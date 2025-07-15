@@ -156,16 +156,12 @@ def idsr_check(query: str, llm) -> AppState:
     Diseases:
     {disease_definitions}
 
-    Your response should be brief and follow this format:
+    Your response should be brief and include as appropriate:
 
-    If possible matches found:
     Possible matches:
     - Disease Name: [Likely] – Reason
     - Disease Name: [Probable] – Reason
-    (Only include diseases that clearly fit based on the information.)
-
-    If none:
-    - No strong match found.
+    (Only include diseases that clearly fit based on the information. If none, say "No strong match found.")
 
     Clarifying questions (optional, only if needed):
     - Question 1
@@ -173,6 +169,7 @@ def idsr_check(query: str, llm) -> AppState:
 
     At the end, always give a brief recommendation like:
     - Recommendation: "Suggest monitoring for the listed conditions." OR "No disease meets criteria based on current data — suggest gathering additional history on [x, y, z]."
+
     """.format(
         query=query, disease_definitions=disease_definitions
     )

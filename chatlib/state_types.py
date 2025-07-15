@@ -8,6 +8,8 @@ class AppState(TypedDict):
     question: str
     rag_result: str
     answer: str
-    last_answer: NotRequired[str | None]
-    last_tool: NotRequired[str | None]
-    idsr_disclaimer: NotRequired[bool]
+    last_answer: Optional[str] = None
+    last_user_message: Optional[str] = None
+    last_tool: Optional[str] = None
+    idsr_disclaimer_shown: bool = False
+    summary: Optional[str] = None
