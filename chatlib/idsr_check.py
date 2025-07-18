@@ -143,39 +143,39 @@ def idsr_check(query: str, llm) -> AppState:
     )
     
     # set up connection to location database and get EpidemicInfo for any diseases in the disease_name metadata field of the results from the hybrid search
-    epi_conn = sqlite3.connect('data/location_data.sqlite')
-    epi_cursor = epi_conn.cursor()
+    conn_epi = sqlite3.connect('data/location_data.sqlite')
+    cursor_epi = conn_epi.cursor()
     disease_names = [doc.metadata.get("disease_name") for doc in results]
     placeholders = ",".join("?" * len(disease_names))
     query_str = f"SELECT Disease, EpidemicInfo FROM who_bulletin WHERE Disease IN ({placeholders})"
-    epi_cursor.execute(query_str, disease_names)
-    epidemic_info = epi_cursor.fetchall()
-    epi_conn.close()
+    cursor_epi.execute(query_str, disease_names)
+    epidemic_info = cursor_epi.fetchall()
+    conn_epi.close()
 
     # print(doc.metadata.get("disease_name") for doc in results)
 
     # set up connection to location database and get results where County = county and Disease is in 
     # the disease_name metadata field of the results from the hybrid search
-    conn = sqlite3.connect('data/location_data.sqlite')
-    cursor = conn.cursor()
+    conn_disease = sqlite3.connect('data/location_data.sqlite')
+    cursor_disease = conn_disease.cursor()
     if county:  # Ensure county is not None
         county_name = county[0]
         disease_names = [doc.metadata.get("disease_name") for doc in results]
         placeholders = ",".join("?" * len(disease_names))
-        query_str = f"SELECT County, Disease, Prevalence, Notes FROM county_disease_info WHERE County = ? AND Disease IN ({placeholders})"
-        cursor.execute(query_str, (county_name, *disease_names))
-        county_info = cursor.fetchall()
+        query_str = f"SELECT County, Disease, Prevalence, Seasonality FROM county_disease_info WHERE County = ? AND Disease IN ({placeholders})"
+        cursor_disease.execute(query_str, (county_name, *disease_names))
+        county_info = cursor_disease.fetchall()
 
         # Get climate information for the county from the rainy seasons table
         # Get the current month
         from datetime import datetime
         current_month = datetime.now().strftime("%B")  # Full month name, e.g. "March"
-        cursor.execute("SELECT RainySeason FROM county_rainy_seasons WHERE County = ? and Month = ?", (county_name, current_month))
-        rainy_season = cursor.fetchone()
+        cursor_disease.execute("SELECT RainySeason FROM county_rainy_seasons WHERE County = ? and Month = ?", (county_name, current_month))
+        rainy_season = cursor_disease.fetchone()
         rainy_season = rainy_season[0] if rainy_season else "Unknown"
 
         # close the connection
-        conn.close()
+        conn_disease.close()
 
     disease_definitions = "\n\n".join(
         [
