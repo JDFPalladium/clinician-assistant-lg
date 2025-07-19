@@ -75,6 +75,14 @@ A conversational assistant designed to help clinicians in Kenya access patient d
    ```sh
    make run
    ```
+   ### Docker Alternative
+5. Build the Docker image:
+   ```sh
+   docker build -t clinician-assistant .
+   ```
+   ```sh
+   docker run -p 7860:7860 --env-file config.env clinician-assistant
+   ```
 
 ---
 
