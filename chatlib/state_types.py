@@ -1,7 +1,9 @@
+# type: ignore
 from typing_extensions import TypedDict, Annotated
 from langchain_core.messages import AnyMessage
 from langgraph.graph.message import add_messages
 from typing import Optional
+
 
 class AppState(TypedDict):
     messages: Annotated[list[AnyMessage], add_messages]

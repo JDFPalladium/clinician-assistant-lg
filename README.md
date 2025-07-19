@@ -29,10 +29,9 @@ A conversational assistant designed to help clinicians in Kenya access patient d
 
 ```
 .
-├── app.py                # Gradio web app entry point
+├── app.py   # Gradio web app entry point
 ├── chat.py
-├── main.py
-├── chatlib/              # Core logic, tools, and utilities
+├── chatlib/    # Core logic, tools, and utilities
 │   ├── assistant_node.py
 │   ├── guidlines_rag_agent_li.py
 │   ├── idsr_check.py
@@ -41,12 +40,15 @@ A conversational assistant designed to help clinicians in Kenya access patient d
 │   ├── patient_sql_agent.py
 │   ├── phi_filter.py
 │   └── state_types.py
-├── Makefile              # Common dev commands (lint, test, format, install, run, clean)
-├── pyproject.toml      # Python dependencies
+├── config.env.example  # env example
+├── Dockerfile  # Docker image
+├── main.py
+├── Makefile    # Common dev commands (lint, test, format, install, run, clean)
+├── pyproject.toml   # uv Python dependencies
 ├── README.md      # Project documentation
+├── requirements.txt      # Python dependencies
 └── uv.lock             
 ```
-
 ---
 
 ## Setup
