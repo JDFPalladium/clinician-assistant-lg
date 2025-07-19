@@ -1,3 +1,4 @@
+# type: ignore
 import gradio as gr
 import uuid
 from dotenv import load_dotenv
@@ -7,17 +8,6 @@ from langgraph.graph import START, StateGraph
 from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.prebuilt import tools_condition, ToolNode
 from langgraph.checkpoint.memory import MemorySaver
-# import sqlite3
-# from langgraph.checkpoint.sqlite import SqliteSaver
-
-# db_path = "state_db/example.db"
-# conn_memory = sqlite3.connect(db_path, check_same_thread=False)
-# memory = SqliteSaver(conn_memory)
-
-# class State(MessagesState):
-#     summary: str
-
-
 
 
 memory = MemorySaver()
@@ -34,7 +24,6 @@ from chatlib.patient_all_data import sql_chain
 from chatlib.idsr_check import idsr_check
 from chatlib.phi_filter import detect_and_redact_phi
 from chatlib.assistant_node import assistant
-# from chatlib.helpers import summarize_conversation, should_summarize
 
 
 def rag_retrieve_tool(query):
@@ -62,7 +51,7 @@ def idsr_check_tool(query):
 tools = [rag_retrieve_tool, sql_chain_tool, idsr_check_tool]
 llm_with_tools = llm.bind_tools(tools)
 
-# System message
+
 sys_msg = SystemMessage(
     content="""
 You are a helpful assistant supporting clinicians during patient visits. You have three tools:
@@ -94,7 +83,6 @@ Do not include any text outside the JSON response.
 )
 
 
-# Graph
 builder = StateGraph(AppState)
 builder.add_node(
     "assistant", lambda state: assistant(state, sys_msg, llm, llm_with_tools)
@@ -107,15 +95,11 @@ react_graph = builder.compile(checkpointer=memory)
 
 
 def chat_with_patient(question: str, thread_id: str = None):  # type: ignore
-    # Generate or reuse thread_id for session persistence
     if thread_id is None or thread_id == "":
         thread_id = str(uuid.uuid4())
 
-    # Check input for PHI and redact if necessary
     question = detect_and_redact_phi(question)["redacted_text"]
 
-    # Prepare input state with new user message and pk_hash
-    # initialize state with patient pk hash
     input_state: AppState = {
         "messages": [HumanMessage(content=question)],
         "question": "",
@@ -125,7 +109,7 @@ def chat_with_patient(question: str, thread_id: str = None):  # type: ignore
         "last_user_message": "",
         "last_tool": None,
         "idsr_disclaimer": False,
-        "summary": None
+        "summary": None,
     }
 
     config = {"configurable": {"thread_id": thread_id, "user_id": thread_id}}
@@ -153,4 +137,7 @@ with gr.Blocks() as app:
         outputs=[output_chat, thread_id_state],
     )
 
-app.launch()
+app.launch(
+    server_name="0.0.0.0",
+    server_port=7860,
+)

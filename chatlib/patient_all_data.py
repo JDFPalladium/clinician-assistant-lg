@@ -186,5 +186,4 @@ def sql_chain(query: str, llm, rag_result: str) -> dict:
 
     response = llm.invoke(prompt)
     answer_text = response.content
-    return {"answer": answer_text,
-            "last_tool": "sql_chain"}
+    return {"answer": answer_text, "last_tool": "sql_chain"}

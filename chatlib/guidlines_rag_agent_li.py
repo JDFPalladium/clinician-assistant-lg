@@ -27,19 +27,4 @@ def rag_retrieve(query: str, llm) -> AppState:
 
     summary_response = llm.invoke(summarization_prompt)
 
-    return {"rag_result": summary_response.content,
-            "last_tool": "rag_retrieve"}
-
-
-# if __name__ == "__main__":
-#     # Test the function
-#     test_state = AppState(
-#         messages=[],
-#         question="What are the first-line treatments for HIV in Kenya?",
-#         rag_result="",
-#         query="",
-#         result="",
-#         answer=""
-#     )
-#     updated_state = rag_retrieve(test_state)
-#     print(updated_state["rag_result"])
+    return {"rag_result": summary_response.content, "last_tool": "rag_retrieve"}  # type: ignore

@@ -16,14 +16,14 @@ from chatlib.state_types import AppState
 from chatlib.guidlines_rag_agent_li import rag_retrieve
 from chatlib.patient_all_data import sql_chain
 from chatlib.idsr_check import idsr_check
-from chatlib.logger import get_logger
 
 tools = [rag_retrieve, sql_chain, idsr_check]
-llm = ChatOpenAI(temperature = 0.0, model="gpt-4o")
+llm = ChatOpenAI(temperature=0.0, model="gpt-4o")
 llm_with_tools = llm.bind_tools([rag_retrieve, sql_chain, idsr_check])
 
 
-sys_msg = SystemMessage(content="""
+sys_msg = SystemMessage(
+    content="""
 You are a helpful assistant supporting clinicians during patient visits. You have three tools:
 
 - rag_retrieve: to access HIV clinical guidelines
@@ -52,8 +52,8 @@ Keep responses concise and focused. The clinician is a healthcare professional; 
 If the clinician's question is unclear, ask for clarification.
 
 Do not include any text outside the JSON response.
-""")
-
+"""
+)
 
 
 def assistant(state: AppState) -> AppState:
@@ -61,23 +61,25 @@ def assistant(state: AppState) -> AppState:
     pk_hash = state.get("pk_hash", None)
 
     if pk_hash:
-        pk_msg = SystemMessage(content=f"The patient identifier (pk_hash) is: {pk_hash}")
+        pk_msg = SystemMessage(
+            content=f"The patient identifier (pk_hash) is: {pk_hash}"
+        )
         messages = [sys_msg, pk_msg] + state["messages"]
     else:
         messages = [sys_msg] + state["messages"]
 
     new_message = llm_with_tools.invoke(messages)
-    
-  
+
     latest_question = ""
     for msg in reversed(messages):
         if isinstance(msg, HumanMessage):
             latest_question = msg.content
             break
 
-    state['messages'] = state['messages'] + [new_message]  # type: ignore
-    state['question'] = latest_question # type: ignore
+    state["messages"] = state["messages"] + [new_message]  # type: ignore
+    state["question"] = latest_question  # type: ignore
     return state
+
 
 # Graph
 builder = StateGraph(AppState)
@@ -96,16 +98,16 @@ react_graph = builder.compile(checkpointer=memory)
 config = {"configurable": {"thread_id": "30"}}
 
 
-input_state:AppState = {
+input_state: AppState = {
     "messages": [HumanMessage(content="summarize the patient's clinical visits")],
     "question": "",
     "rag_result": "",
     "answer": "",
-    "pk_hash": "962885FEADB7CCF19A2CC506D39818EC448D5396C4D1AEFDC59873090C7FBF73" # type: ignore
+    "pk_hash": "962885FEADB7CCF19A2CC506D39818EC448D5396C4D1AEFDC59873090C7FBF73",  # type: ignore
 }
 
 
-message_output = react_graph.invoke(input_state, config) # type: ignore
+message_output = react_graph.invoke(input_state, config)  # type: ignore
 
-for m in message_output['messages']:
+for m in message_output["messages"]:
     m.pretty_print()

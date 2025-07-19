@@ -35,7 +35,6 @@ for doc in tagged_documents:
     for kw in seen:
         keyword_doc_counts[kw] += 1
 
-
 keyword_weights = {
     kw: math.log(total_docs / (1 + count)) for kw, count in keyword_doc_counts.items()
 }
@@ -159,8 +158,8 @@ def idsr_check(query: str, llm) -> AppState:
     Your response should be brief and include as appropriate:
 
     Possible matches:
-    - Disease Name: [Likely] – Reason
-    - Disease Name: [Probable] – Reason
+    - Disease Name: [Likely] - Reason
+    - Disease Name: [Probable] - Reason
     (Only include diseases that clearly fit based on the information. If none, say "No strong match found.")
 
     Clarifying questions (optional, only if needed):
