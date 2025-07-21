@@ -45,11 +45,11 @@ keyword_weights = {
 # first, get sitecode from environment variable
 sitecode = os.environ.get("SITECODE")
 # next, connect to location database and get county where code = sitecode
-conn = sqlite3.connect('data/location_data.sqlite')
-cursor = conn.cursor()
-cursor.execute("SELECT County FROM sitecode_county_xwalk WHERE Code = ?", (sitecode,))
-county = cursor.fetchone()
-conn.close()
+county_conn = sqlite3.connect('data/location_data.sqlite')
+county_cursor = county_conn.cursor()
+county_cursor.execute("SELECT County FROM sitecode_county_xwalk WHERE Code = ?", (sitecode,))
+county = county_cursor.fetchone()
+county_conn.close()
 
 def score_doc(doc_to_score, matched_keywords):
     doc_keywords = set(doc_to_score.metadata.get("matched_keywords", []))
@@ -143,14 +143,14 @@ def idsr_check(query: str, llm) -> AppState:
     )
     
     # set up connection to location database and get EpidemicInfo for any diseases in the disease_name metadata field of the results from the hybrid search
-    conn = sqlite3.connect('data/location_data.sqlite')
-    cursor = conn.cursor()
+    epi_conn = sqlite3.connect('data/location_data.sqlite')
+    epi_cursor = epi_conn.cursor()
     disease_names = [doc.metadata.get("disease_name") for doc in results]
     placeholders = ",".join("?" * len(disease_names))
     query_str = f"SELECT Disease, EpidemicInfo FROM who_bulletin WHERE Disease IN ({placeholders})"
-    cursor.execute(query_str, disease_names)
-    epidemic_info = cursor.fetchall()
-    conn.close()
+    epi_cursor.execute(query_str, disease_names)
+    epidemic_info = epi_cursor.fetchall()
+    epi_conn.close()
 
     # print(doc.metadata.get("disease_name") for doc in results)
 
