@@ -4,7 +4,6 @@ import dateparser.search
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
 
-
 RELATIVE_INDICATORS = [
     "ago",
     "later",
