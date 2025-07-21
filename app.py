@@ -126,6 +126,8 @@ with gr.Blocks() as app:
         """
         # Clinician Assistant
         Welcome! Enter your clinical question below. The assistant can access HIV guidelines, patient data, and disease surveillance tools.
+
+        **Note**: This is a prototype tool. There is mock data for one patient who is located in Migori County.
         """
     )
     question_input = gr.Textbox(label="Question")
