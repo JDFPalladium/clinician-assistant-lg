@@ -1,13 +1,14 @@
 import sqlite3
 import pandas as pd
 import os
-
+from .helpers import describe_relative_date
 
 def safe(val):
     if pd.isnull(val) or val in ("", "NULL"):
         return "missing"
     return val
 
+# define a function that takes in a date string and returns a relative date description
 
 def extract_year(date_str):
     if pd.isnull(date_str) or date_str in ("", "NULL"):
@@ -54,6 +55,11 @@ def sql_chain(query: str, llm, rag_result: str) -> dict:
         if df.empty:
             return "No clinical visit data available."
 
+        # Ensure VisitDate and NextAppointmentDate are datetime
+        df = df.copy()
+        df["VisitDate"] = pd.to_datetime(df["VisitDate"], errors="coerce")
+        df["NextAppointmentDate"] = pd.to_datetime(df["NextAppointmentDate"], errors="coerce")
+        
         summaries = []
         ordinal_map = {1: "First", 2: "Second", 3: "Third", 4: "Fourth", 5: "Fifth"}
         for idx, (_, row) in enumerate(
@@ -61,8 +67,8 @@ def sql_chain(query: str, llm, rag_result: str) -> dict:
         ):
             ordinal = ordinal_map.get(idx, f"{idx}th")
             summaries.append(
-                f"{ordinal} most recent clinical visit, Year of visit {extract_year(row['VisitDate'])}: WHO Stage {safe(row['WHOStage'])}, Weight {safe(row['Weight'])}kg, "
-                f"NextAppointmentDate {extract_year(safe(row['NextAppointmentDate']))}, VisitType {safe(row['VisitType'])}, "
+                f"{ordinal} most recent clinical visit, {describe_relative_date(row['VisitDate'])}: WHO Stage {safe(row['WHOStage'])}, Weight {safe(row['Weight'])}kg, "
+                f"NextAppointmentDate {describe_relative_date(safe(row['NextAppointmentDate']))}, VisitType {safe(row['VisitType'])}, "
                 f"VisitBy {safe(row['VisitBy'])}, Pregnant {safe(row['Pregnant'])}, Breastfeeding {safe(row['Breastfeeding'])}, "
                 f"WHOStage {safe(row['WHOStage'])}, StabilityAssessment {safe(row['StabilityAssessment'])}, "
                 f"DifferentiatedCare {safe(row['DifferentiatedCare'])}, WHOStagingOI {safe(row['WHOStagingOI'])}, "
@@ -85,6 +91,11 @@ def sql_chain(query: str, llm, rag_result: str) -> dict:
         if df.empty:
             return "No pharmacy data available."
 
+        # Ensure DispenseDate and ExpectedReturn are datetime
+        df = df.copy()
+        df["DispenseDate"] = pd.to_datetime(df["DispenseDate"], errors="coerce")
+        df["ExpectedReturn"] = pd.to_datetime(df["ExpectedReturn"], errors="coerce")
+
         summaries = []
         ordinal_map = {1: "First", 2: "Second", 3: "Third", 4: "Fourth", 5: "Fifth"}
         for idx, (_, row) in enumerate(
@@ -92,8 +103,8 @@ def sql_chain(query: str, llm, rag_result: str) -> dict:
         ):
             ordinal = ordinal_map.get(idx, f"{idx}th")
             summaries.append(
-                f"{ordinal} most recent pharmacy visit, Year of visit {extract_year(row['DispenseDate'])}, "
-                f"ExpectedReturn {extract_year(row['ExpectedReturn'])}, Drug {safe(row['Drug'])}, "
+                f"{ordinal} most recent pharmacy visit, {describe_relative_date(row['DispenseDate'])}, "
+                f"ExpectedReturn {describe_relative_date(row['ExpectedReturn'])}, Drug {safe(row['Drug'])}, "
                 f"Duration {safe(row['Duration'])}, TreatmentType {safe(row['TreatmentType'])}, "
                 f"RegimenLine {safe(row['RegimenLine'])}, "
                 f"RegimenChangedSwitched {safe(row['RegimenChangedSwitched'])}, "
@@ -113,13 +124,17 @@ def sql_chain(query: str, llm, rag_result: str) -> dict:
         if df.empty:
             return "No lab data available."
 
+        # Ensure OrderedbyDate is datetime
+        df = df.copy()
+        df["OrderedbyDate"] = pd.to_datetime(df["OrderedbyDate"], errors="coerce")
+
         summaries = []
         ordinal_map = {1: "First", 2: "Second", 3: "Third", 4: "Fourth", 5: "Fifth"}
         for idx, (_, row) in enumerate(
             df.sort_values("OrderedbyDate", ascending=False).head(5).iterrows(), start=1
         ):
             summaries.append(
-                f"{ordinal_map.get(idx, idx)} most recent lab test, Year of test {extract_year(row['OrderedbyDate'])}. TestName {safe(row['TestName'])}, TestResult {safe(row['TestResult'])},"
+                f"{ordinal_map.get(idx, idx)} most recent lab test, {describe_relative_date(row['OrderedbyDate'])}. TestName {safe(row['TestName'])}, TestResult {safe(row['TestResult'])},"
             )
         return "\n".join(summaries)
 
@@ -183,7 +198,7 @@ def sql_chain(query: str, llm, rag_result: str) -> dict:
         f"Demographic Summary:\n{demographic_summary}\n"
     )
     print("Prompt length (chars):", len(prompt))
-
+    print(prompt)
     response = llm.invoke(prompt)
     answer_text = response.content
     return {"answer": answer_text, "last_tool": "sql_chain"}

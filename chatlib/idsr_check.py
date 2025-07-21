@@ -94,7 +94,7 @@ Return the matching keywords as a JSON object with a single key "keywords" whose
 
 
 def hybrid_search_with_query_keywords(
-    query, vstore, documents, keyword_list, llm, top_k=5
+    query, vstore, documents, keyword_list, llm, top_k=3
 ):
 
     semantic_hits = vstore.similarity_search(query, k=top_k)
@@ -154,15 +154,14 @@ def idsr_check(query: str, llm) -> AppState:
 
     # print(doc.metadata.get("disease_name") for doc in results)
 
-    # set up connection to location database and get results where County = county and Disease is in 
-    # the disease_name metadata field of the results from the hybrid search
+    # set up connection to location database and county-specific disease prevalence and seasonality information for any diseases in the disease_name metadata field of the results from the hybrid search
     conn_disease = sqlite3.connect('data/location_data.sqlite')
     cursor_disease = conn_disease.cursor()
     if county:  # Ensure county is not None
         county_name = county[0]
         disease_names = [doc.metadata.get("disease_name") for doc in results]
         placeholders = ",".join("?" * len(disease_names))
-        query_str = f"SELECT County, Disease, Prevalence, Seasonality FROM county_disease_info WHERE County = ? AND Disease IN ({placeholders})"
+        query_str = f"SELECT County, Disease, Prevalence, Notes FROM county_disease_info WHERE County = ? AND Disease IN ({placeholders})"
         cursor_disease.execute(query_str, (county_name, *disease_names))
         county_info = cursor_disease.fetchall()
 
@@ -193,10 +192,10 @@ def idsr_check(query: str, llm) -> AppState:
 
     ## Instructions:
     1. Carefully compare the case description to each disease definition, taking into account the prevalence and seasonality information.
-    2. If a disease seems like a possible match based on the available information, list it and explain why. 
+    2. If a disease seems like a possible match based on the available information, list it and explain why.
     3. Only include rare diseases, or diseases that don't fit seasonally, if the match is extremely strong. Prioritize common and plausible conditions.
     4. You don't need to suggest matches if none of the diseases seem relevant.
-    5. Ask clarifying questions if helpful to make better match suggestions. Possible questions might include asking about specific symptoms, demographic characteristics, exposures, or travel history.
+    5. Ask clarifying questions to make better match suggestions. Possible questions might include asking about specific symptoms, demographic characteristics, exposures, or travel history.
     6. At the end, give a brief recommendation on next steps, such as monitoring for certain conditions or gathering additional history.
 
     ## Case:
@@ -208,7 +207,7 @@ def idsr_check(query: str, llm) -> AppState:
     ## Locational context:
     In {county_name}, the current rainy season status is {rainy_season}.
     
-    The above diseases have the following prevalence (county, disease name, prevalence, seasonality):
+    The above diseases have the following prevalence in the county where the patient is located:
     {county_info}
 
     Here are any relevant epidemic alerts for these diseases:
@@ -217,22 +216,24 @@ def idsr_check(query: str, llm) -> AppState:
     ## Expected Output
 
     Possible matches:
-    - Disease Name: Reason
-    - Disease Name: Reason
-
+    - Disease 1: Explanation
+    - Disease 2: Explanation
+    - Disease 3: Explanation
+    
     Clarifying questions:
     - Question 1
     - Question 2
 
-    Recommendation:
+    Recommendation on next steps:
+
 
     """.format(
         query=query, disease_definitions=disease_definitions, county_name=county_name if county else "Unknown County",
         rainy_season=rainy_season if county else "Unknown",
-        county_info="\n".join([f"- {row[0]}, {row[1]}, Prevalence: {row[2]}, Seasonality: {row[3]}" for row in county_info]) if county else "No county information available.",
+        county_info="\n".join([f"- {row[0]}, {row[1]}, Prevalence: {row[2]}, Notes: {row[3]}" for row in county_info]) if county else "No county information available.",
         epidemic_info="\n".join([f"- {row[0]}: {row[1]}" for row in epidemic_info]) if epidemic_info else "No epidemic information available."
     )
-
+    print(prompt)
     llm_response = llm.invoke(prompt)
     answer_text = (
         llm_response.content.strip()

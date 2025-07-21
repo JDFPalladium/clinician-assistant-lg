@@ -102,6 +102,8 @@ def chat_with_patient(question: str, thread_id: str = None):  # type: ignore
 
     question = detect_and_redact_phi(question)["redacted_text"]
 
+    print(question)
+
     # First turn: initialize state
     input_state: AppState = {
         "messages": [HumanMessage(content=question)]
