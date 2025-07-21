@@ -33,6 +33,22 @@ def summarize_conversation(messages, llm):
 
 
 def assistant(state: AppState, sys_msg, llm, llm_with_tools) -> AppState:
+
+    # Initialize missing keys with defaults
+    state.setdefault("question", "")
+    state.setdefault("rag_result", "")
+    state.setdefault("answer", "")
+    state.setdefault("last_answer", None)
+    state.setdefault("last_user_message", None)
+    state.setdefault("last_tool", None)
+    state.setdefault("idsr_disclaimer_shown", False)
+    state.setdefault("summary", None)
+    state.setdefault("context", None)
+    state.setdefault("context_versions", {})
+    state.setdefault("last_context_injected_versions", {})
+    state.setdefault("context_version_ready_for_injection", 0)
+    state.setdefault("context_first_response_sent", True)
+
     messages = state.get("messages", [])
     base_messages = [sys_msg]
     messages = base_messages + [m for m in messages if not isinstance(m, SystemMessage)]
@@ -48,17 +64,65 @@ def assistant(state: AppState, sys_msg, llm, llm_with_tools) -> AppState:
         state["answer"] = ""
         state["rag_result"] = ""
 
-    # Update state from any ToolMessages appended by previous tool calls
-    # Only consider the most recent ToolMessage for updating state
+    # Process latest ToolMessage and update context_version
     for msg in reversed(messages):
         if isinstance(msg, ToolMessage):
             try:
                 content = msg.content
                 data = json.loads(content) if isinstance(content, str) else content
-                state.update(data)
-                break  # only process the most recent ToolMessage
+
+                tool_name = data.get("last_tool")
+                new_context = data.get("context")
+
+                if tool_name:
+                    old_context = state.get("context", "")
+                    old_version = state["context_versions"].get(tool_name, 0)
+
+                    if new_context is not None and new_context != old_context:
+                        state["context"] = new_context
+                        state["context_versions"][tool_name] = old_version + 1
+                        state["context_first_response_sent"] = False  # Reset flag on new context
+
+                    state["last_tool"] = tool_name
+
+                for k, v in data.items():
+                    if k not in ("context", "last_tool"):
+                        state[k] = v
+
+                break
             except json.JSONDecodeError:
                 break
+
+    tool_name = "idsr_check"
+    current_version = state["context_versions"].get(tool_name, 0)
+    last_injected_version = state["last_context_injected_versions"].get(tool_name, 0)
+
+    # On turns where user message is unchanged, advance ready_for_injection to current_version
+    if not user_message_changed and state["context_version_ready_for_injection"] < current_version:
+        state["context_version_ready_for_injection"] = current_version
+
+    # Inject context system message only if:
+    # - last_tool matches tool_name
+    # - context exists
+    # - ready_for_injection > last injected version
+    # - AND first AI response after new context has been sent
+    if (
+        state.get("last_tool") == tool_name
+        and state.get("context")
+        and state["context_version_ready_for_injection"] > last_injected_version
+        and state.get("context_first_response_sent", True)
+    ):
+        context_msg = SystemMessage(
+            content=(
+                f"The following information was retrieved from the {tool_name.upper()} database and may help answer the user's question:\n\n"
+                f"{state['context']}\n\n"
+                "Use this information when responding."
+            )
+        )
+        messages.append(context_msg)
+
+        state["last_context_injected_versions"][tool_name] = state["context_version_ready_for_injection"]
+        state["last_tool"] = None
 
     # Invoke LLM with tools (this returns AIMessage with tool_calls if tool call is needed)
     new_message = llm_with_tools.invoke(messages)
@@ -99,6 +163,10 @@ def assistant(state: AppState, sys_msg, llm, llm_with_tools) -> AppState:
         final_content = disclaimer + final_content
         state["idsr_disclaimer_shown"] = True
 
+    # After generating AI message, mark first response sent
+    if state.get("last_tool") == tool_name or state.get("context_first_response_sent") is False:
+        state["context_first_response_sent"] = True
+
     # Replace the last AIMessage content with final_content to avoid duplicates
     for i in reversed(range(len(messages))):
         if isinstance(messages[i], AIMessage):
@@ -114,7 +182,7 @@ def assistant(state: AppState, sys_msg, llm, llm_with_tools) -> AppState:
         m for m in non_sys_messages if isinstance(m, (HumanMessage, AIMessage))
     ]
 
-    if len(human_ai_messages) > 15:
+    if len(human_ai_messages) > 10:
         summary_text = summarize_conversation(messages, llm)
         summary_msg = SystemMessage(
             content="Summary of earlier conversation:\n" + summary_text

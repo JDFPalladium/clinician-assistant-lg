@@ -45,7 +45,9 @@ def idsr_check_tool(query):
     """Check if the patient case description matches any known diseases."""
     result = idsr_check(query, llm=llm)
 
-    return {"answer": result.get("answer", ""), "last_tool": "idsr_check"}
+    return {"answer": result.get("answer", ""),
+             "last_tool": "idsr_check",
+             "context": result.get("context", None)}
 
 
 tools = [rag_retrieve_tool, sql_chain_tool, idsr_check_tool]
@@ -58,7 +60,7 @@ You are a helpful assistant supporting clinicians during patient visits. You hav
 
 - rag_retrieve: to access HIV clinical guidelines
 - sql_chain: to access HIV data about the patient with whom the clinician is meeting. When using this tool, always run rag_retrieve first to get context
-- idsr_check: to check if the patient case description matches any known diseases
+- idsr_check: to check if the patient case description matches any known diseases. 
 
 When a tool is needed, respond only with a JSON object specifying the tool to call and its minimal arguments, for example:
 {
@@ -100,16 +102,9 @@ def chat_with_patient(question: str, thread_id: str = None):  # type: ignore
 
     question = detect_and_redact_phi(question)["redacted_text"]
 
+    # First turn: initialize state
     input_state: AppState = {
-        "messages": [HumanMessage(content=question)],
-        "question": "",
-        "rag_result": "",
-        "answer": "",
-        "last_answer": "",
-        "last_user_message": "",
-        "last_tool": None,
-        "idsr_disclaimer": False,
-        "summary": None,
+        "messages": [HumanMessage(content=question)]
     }
 
     config = {"configurable": {"thread_id": thread_id, "user_id": thread_id}}
@@ -125,6 +120,12 @@ def chat_with_patient(question: str, thread_id: str = None):  # type: ignore
 
 
 with gr.Blocks() as app:
+    gr.Markdown(
+        """
+        # Clinician Assistant
+        Welcome! Enter your clinical question below. The assistant can access HIV guidelines, patient data, and disease surveillance tools.
+        """
+    )
     question_input = gr.Textbox(label="Question")
     thread_id_state = gr.State()
     output_chat = gr.Textbox(label="Assistant Response")

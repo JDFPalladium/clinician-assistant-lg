@@ -15,3 +15,8 @@ class AppState(TypedDict):
     last_tool: Optional[str] = None
     idsr_disclaimer_shown: bool = False
     summary: Optional[str] = None
+    context: Optional[str] = None
+    context_versions: dict[str, int] = {}
+    last_context_injected_versions: dict[str, int] = {}
+    context_version_ready_for_injection: int = 0
+    context_first_response_sent: bool = True

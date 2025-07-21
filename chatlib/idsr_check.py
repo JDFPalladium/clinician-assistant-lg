@@ -9,6 +9,8 @@ from langchain_core.output_parsers import PydanticOutputParser
 import json
 import math
 from collections import Counter
+import sqlite3
+import os
 
 
 with open("./guidance_docs/idsr_keywords.txt", "r", encoding="utf-8") as f:
@@ -39,6 +41,15 @@ keyword_weights = {
     kw: math.log(total_docs / (1 + count)) for kw, count in keyword_doc_counts.items()
 }
 
+## prepare to get location data
+# first, get sitecode from environment variable
+sitecode = os.environ.get("SITECODE")
+# next, connect to location database and get county where code = sitecode
+conn = sqlite3.connect('data/location_data.sqlite')
+cursor = conn.cursor()
+cursor.execute("SELECT County FROM sitecode_county_xwalk WHERE Code = ?", (sitecode,))
+county = cursor.fetchone()
+conn.close()
 
 def score_doc(doc_to_score, matched_keywords):
     doc_keywords = set(doc_to_score.metadata.get("matched_keywords", []))
@@ -110,9 +121,9 @@ def hybrid_search_with_query_keywords(
 
     ranked_docs = sorted(scored_docs, key=lambda x: -x[1])
     top_docs = [doc for doc, score in ranked_docs if score > 0]
-    top_3_docs = top_docs[:3]
+    top_5_docs = top_docs[:5]
 
-    merged = {doc.page_content: doc for doc in semantic_hits + top_3_docs}
+    merged = {doc.page_content: doc for doc in semantic_hits + top_5_docs}
     return list(merged.values())
 
 
@@ -130,47 +141,96 @@ def idsr_check(query: str, llm) -> AppState:
     results = hybrid_search_with_query_keywords(
         query, vectorstore, tagged_documents, keywords, llm
     )
+    
+    # set up connection to location database and get EpidemicInfo for any diseases in the disease_name metadata field of the results from the hybrid search
+    conn = sqlite3.connect('data/location_data.sqlite')
+    cursor = conn.cursor()
+    disease_names = [doc.metadata.get("disease_name") for doc in results]
+    placeholders = ",".join("?" * len(disease_names))
+    query_str = f"SELECT Disease, EpidemicInfo FROM who_bulletin WHERE Disease IN ({placeholders})"
+    cursor.execute(query_str, disease_names)
+    epidemic_info = cursor.fetchall()
+    conn.close()
+
+    # print(doc.metadata.get("disease_name") for doc in results)
+
+    # set up connection to location database and get results where County = county and Disease is in 
+    # the disease_name metadata field of the results from the hybrid search
+    conn = sqlite3.connect('data/location_data.sqlite')
+    cursor = conn.cursor()
+    if county:  # Ensure county is not None
+        county_name = county[0]
+        disease_names = [doc.metadata.get("disease_name") for doc in results]
+        placeholders = ",".join("?" * len(disease_names))
+        query_str = f"SELECT County, Disease, Prevalence, Notes FROM county_disease_info WHERE County = ? AND Disease IN ({placeholders})"
+        cursor.execute(query_str, (county_name, *disease_names))
+        county_info = cursor.fetchall()
+
+        # Get climate information for the county from the rainy seasons table
+        # Get the current month
+        from datetime import datetime
+        current_month = datetime.now().strftime("%B")  # Full month name, e.g. "March"
+        cursor.execute("SELECT RainySeason FROM county_rainy_seasons WHERE County = ? and Month = ?", (county_name, current_month))
+        rainy_season = cursor.fetchone()
+        rainy_season = rainy_season[0] if rainy_season else "Unknown"
+
+        # close the connection
+        conn.close()
 
     disease_definitions = "\n\n".join(
         [
-            f"{doc.metadata.get('disease_name', 'Unknown Disease')}:\n{doc.page_content}"
+            f"### Disease: {doc.metadata.get('disease_name', 'Unknown Disease')}:\n{doc.page_content}"
             for doc in results
         ]
     )
 
+
     prompt = """
-    You are a medical assistant reviewing a brief clinical case in Kenya to help identify which diseases the patient may plausibly have. You have access to several disease definitions.
+    You are a medical assistant reviewing a brief clinical case in Kenya to help identify which diseases the patient may plausibly have. 
+    You have access to several disease definitions. You also have access to information about the prevalence of each disease in the county
+    where the patient is located. The prevalence of some diseases varies by season, and some diseases are also more likely when there is a
+    declared epidemic. Information on the timing of the rainy season and any declared epidemics is also provided.
 
-    Your task is as follows:
-    1. Carefully compare the case description to each disease definition.
-    2. If a disease seems like a possible match based on the available information, list it and explain why.
-    3. Only include rare diseases (e.g., eradicated or non-endemic to Kenya) if the match is extremely strong. Prioritize common and plausible conditions.
-    4. If no disease clearly matches, say: "No strong match found."
-    5. Ask clarifying questions if helpful to make better match suggestions.
-    6. After asking clarifying questions, proceed with an assessment anyway based on what is already available.
+    ## Instructions:
+    1. Carefully compare the case description to each disease definition, taking into account the prevalence and seasonality information.
+    2. If a disease seems like a possible match based on the available information, list it and explain why. 
+    3. Only include rare diseases, or diseases that don't fit seasonally, if the match is extremely strong. Prioritize common and plausible conditions.
+    4. You don't need to suggest matches if none of the diseases seem relevant.
+    5. Ask clarifying questions if helpful to make better match suggestions. Possible questions might include asking about specific symptoms, demographic characteristics, exposures, or travel history.
+    6. At the end, give a brief recommendation on next steps, such as monitoring for certain conditions or gathering additional history.
 
-    Case:
+    ## Case:
     {query}
 
-    Diseases:
+    ## Diseases:
     {disease_definitions}
 
-    Your response should be brief and include as appropriate:
+    ## Locational context:
+    In {county_name}, the current rainy season status is {rainy_season}.
+    
+    The above diseases have the following prevalence (county, disease name, prevalence, seasonality):
+    {county_info}
+
+    Here are any relevant epidemic alerts for these diseases:
+    {epidemic_info}
+
+    ## Expected Output
 
     Possible matches:
-    - Disease Name: [Likely] - Reason
-    - Disease Name: [Probable] - Reason
-    (Only include diseases that clearly fit based on the information. If none, say "No strong match found.")
+    - Disease Name: Reason
+    - Disease Name: Reason
 
-    Clarifying questions (optional, only if needed):
+    Clarifying questions:
     - Question 1
     - Question 2
 
-    At the end, always give a brief recommendation like:
-    - Recommendation: "Suggest monitoring for the listed conditions." OR "No disease meets criteria based on current data — suggest gathering additional history on [x, y, z]."
+    Recommendation:
 
     """.format(
-        query=query, disease_definitions=disease_definitions
+        query=query, disease_definitions=disease_definitions, county_name=county_name if county else "Unknown County",
+        rainy_season=rainy_season if county else "Unknown",
+        county_info="\n".join([f"- {row[0]}, {row[1]}, Prevalence: {row[2]}, Seasonality: {row[3]}" for row in county_info]) if county else "No county information available.",
+        epidemic_info="\n".join([f"- {row[0]}: {row[1]}" for row in epidemic_info]) if epidemic_info else "No epidemic information available."
     )
 
     llm_response = llm.invoke(prompt)
@@ -180,4 +240,23 @@ def idsr_check(query: str, llm) -> AppState:
         else "No relevant disease information found."
     )
 
-    return {"answer": answer_text, "last_tool": "idsr_check"}  # type: ignore
+    # Set up context to return.
+    # First, use an LLM to identify which diseases from disease_definitions were mentioned in the answer_text
+    disease_names_in_answer = [doc.metadata.get("disease_name") for doc in results if doc.metadata.get("disease_name") in answer_text]
+    # Next, filter the results to only include those diseases
+    filtered_results = [doc for doc in results if doc.metadata.get("disease_name") in disease_names_in_answer]
+    # Finally, create context string with only those diseases, plus any county_info and epidemic_info
+    context_parts = []
+    if filtered_results:
+        context_parts.append("### Disease Definitions:\n" + "\n\n".join(
+            [
+                f"### Disease: {doc.metadata.get('disease_name', 'Unknown Disease')}:\n{doc.page_content}"
+                for doc in filtered_results
+            ]
+        ))
+    if county and county_info:
+        context_parts.append("### County Disease Information:\n" + "\n".join([f"- {row[0]}, {row[1]}, Prevalence: {row[2]}, Seasonality: {row[3]}" for row in county_info]))
+    if epidemic_info:
+        context_parts.append("### Epidemic Information:\n" + "\n".join([f"- {row[0]}: {row[1]}" for row in epidemic_info]))
+
+    return {"answer": answer_text, "last_tool": "idsr_check", "context": context_parts}  # type: ignore
