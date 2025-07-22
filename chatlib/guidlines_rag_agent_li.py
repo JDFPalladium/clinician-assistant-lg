@@ -5,7 +5,7 @@ from .state_types import AppState
 storage_context = StorageContext.from_defaults(persist_dir="guidance_docs/arv_metadata")
 index = load_index_from_storage(storage_context)
 retriever = index.as_retriever(
-    similarity_top_k=3,
+    similarity_top_k=5,
     similarity_threshold=0.5,
 )
 
@@ -19,7 +19,7 @@ def rag_retrieve(query: str, llm) -> AppState:
     )
 
     summarization_prompt = (
-        "Summarize the following HIV/AIDS clinical guideline information concisely, "
+        "Summarize the following HIV/AIDS clinical guideline information, "
         "highlighting key points relevant to the clinician's question below:\n\n"
         f"Question: {user_prompt}\n\n"
         f"Guideline Text:\n{retrieved_text}"

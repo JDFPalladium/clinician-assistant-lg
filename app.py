@@ -140,8 +140,11 @@ def chat_with_patient(question: str, patient_id: str, sitecode: str, thread_id: 
 
     print(question)
 
-    # get first five characters of sitecode_selection
-    sitecode_selected = sitecode[:5]
+    # get first five characters of sitecode_selection if not none
+    if sitecode is None or sitecode == "":
+        sitecode_selected = ""
+    else:
+        sitecode_selected = sitecode[:5]
 
     # First turn: initialize state
     input_state: AppState = {
