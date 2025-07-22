@@ -161,6 +161,8 @@ def chat_with_patient(question: str, patient_id: str, sitecode: str, thread_id: 
 
     return assistant_message, thread_id
 
+def init_session():
+    return str(uuid.uuid4())
 
 with gr.Blocks() as app:
     gr.Markdown(
@@ -178,18 +180,18 @@ with gr.Blocks() as app:
             choices=[None] + [str(i) for i in range(1, 11)], label="Fake ID Number"
         )
         sitecode_selection = gr.Dropdown(
-            choices=[
+            choices=[None] + [
                 "32060 - Migori",
                 "32046 - Machakos",
                 "32029 - Nairobi",
                 "31660 - Mombasa",
                 "31450 - Samburu",
             ],
-            label="Site Code",
+            label="Sitecode",
         )
 
     question_input = gr.Textbox(label="Question")
-    thread_id_state = gr.State()
+    thread_id_state = gr.State(init_session())
     output_chat = gr.Textbox(label="Assistant Response")
 
     submit_btn = gr.Button("Ask")
