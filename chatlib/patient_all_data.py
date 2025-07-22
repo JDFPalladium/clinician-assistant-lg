@@ -1,14 +1,18 @@
 import sqlite3
 import pandas as pd
-import os
+
+# import os
 from .helpers import describe_relative_date
+
 
 def safe(val):
     if pd.isnull(val) or val in ("", "NULL"):
         return "missing"
     return val
 
+
 # define a function that takes in a date string and returns a relative date description
+
 
 def extract_year(date_str):
     if pd.isnull(date_str) or date_str in ("", "NULL"):
@@ -19,23 +23,21 @@ def extract_year(date_str):
         return "invalid date"
 
 
-def sql_chain(query: str, llm, rag_result: str) -> dict:
+def sql_chain(query: str, llm, rag_result: str, pk_hash: str) -> dict:
     """
     Annotated function that takes a patient identifer (pk_hash) and returns
     all data related to that patient from the SQL database.
     It writes an SQL query to retrieve relevant data, executes the query,
     and generates a natural language answer based on the query results.
     Returns the final answer as a string.
-    The function uses the QuerySQLDatabaseTool to handle the SQL operations.
     The state should contain the following fields:
     - question: str - the question seeking information on patient data
     - pk_hash: str - the patient identifier to query the database
     - rag_result: str - context information from the guidelines retrieval
-    The function will update the state with the answer to the question.
-    The answer will be generated based on the SQL query results and the context information.
-    The function will return the updated state with the answer.
+    The function returns a dict with answer and last_tool keys.
     """
-    pk_hash = os.environ.get("PK_HASH")
+    # pk_hash = os.environ.get("PK_HASH")
+    print(pk_hash)
     if not pk_hash:
         raise ValueError("pk_hash is required in state for SQL queries.")
 
@@ -58,8 +60,10 @@ def sql_chain(query: str, llm, rag_result: str) -> dict:
         # Ensure VisitDate and NextAppointmentDate are datetime
         df = df.copy()
         df["VisitDate"] = pd.to_datetime(df["VisitDate"], errors="coerce")
-        df["NextAppointmentDate"] = pd.to_datetime(df["NextAppointmentDate"], errors="coerce")
-        
+        df["NextAppointmentDate"] = pd.to_datetime(
+            df["NextAppointmentDate"], errors="coerce"
+        )
+
         summaries = []
         ordinal_map = {1: "First", 2: "Second", 3: "Third", 4: "Fourth", 5: "Fifth"}
         for idx, (_, row) in enumerate(

@@ -20,9 +20,11 @@ RELATIVE_INDICATORS = [
     "past",
 ]
 
+
 def is_relative_date(text_relative):
     text_lower = text_relative.lower()
     return any(word in text_lower for word in RELATIVE_INDICATORS)
+
 
 def dateparser_detect(text_dates):
     results_date = dateparser.search.search_dates(text_dates, languages=["en"])
@@ -30,6 +32,7 @@ def dateparser_detect(text_dates):
         return []
     filtered = [r for r in results_date if not is_relative_date(r[0])]
     return filtered
+
 
 def describe_relative_date(dt, reference=None):
     if reference is None:

@@ -8,6 +8,8 @@ from typing import Optional
 class AppState(TypedDict):
     messages: Annotated[list[AnyMessage], add_messages]
     question: str
+    pk_hash: str
+    sitecode: str
     rag_result: str
     answer: str
     last_answer: Optional[str] = None

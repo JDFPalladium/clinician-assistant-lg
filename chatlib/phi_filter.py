@@ -3,6 +3,7 @@ import re
 
 from .helpers import dateparser_detect, describe_relative_date
 
+
 def load_kenyan_names(filepath="data/kenyan_names.txt"):
     if not Path(filepath).exists():
         return set()

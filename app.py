@@ -35,19 +35,21 @@ def rag_retrieve_tool(query):
     }
 
 
-def sql_chain_tool(query, rag_result):
+def sql_chain_tool(query, rag_result, pk_hash):
     """Query patient data from the SQL database and summarize results."""
-    result = sql_chain(query, llm=llm, rag_result=rag_result)
+    result = sql_chain(query, llm=llm, rag_result=rag_result, pk_hash=pk_hash)
     return {"answer": result.get("answer", ""), "last_tool": "sql_chain"}
 
 
-def idsr_check_tool(query):
+def idsr_check_tool(query, sitecode):
     """Check if the patient case description matches any known diseases."""
-    result = idsr_check(query, llm=llm)
+    result = idsr_check(query, llm=llm, sitecode=sitecode)
 
-    return {"answer": result.get("answer", ""),
-             "last_tool": "idsr_check",
-             "context": result.get("context", None)}
+    return {
+        "answer": result.get("answer", ""),
+        "last_tool": "idsr_check",
+        "context": result.get("context", None),
+    }
 
 
 tools = [rag_retrieve_tool, sql_chain_tool, idsr_check_tool]
@@ -64,8 +66,42 @@ You are a helpful assistant supporting clinicians during patient visits. You hav
 
 When a tool is needed, respond only with a JSON object specifying the tool to call and its minimal arguments, for example:
 {
-  "tool": "idsr_check",
-  "args": {"query": "patient vaginal bleeding"}
+  "tool": "rag_retrieve_tool",
+  "args": {
+    "query": "patient vaginal bleeding",
+  }
+}
+
+When calling the "sql_chain" tool, always include the following arguments in the JSON response:
+
+- "query": the clinician's question
+- "rag_result": the clinical guideline context obtained from rag_retrieve
+- "pk_hash": the patient identifier string
+
+For example:
+
+{
+  "tool": "sql_chain_tool",
+  "args": {
+    "query": "What is the patient's latest lab results?",
+    "rag_result": "<clinical guideline context>",
+    "pk_hash": "patient123"
+  }
+}
+
+When calling the "idsr_check_tool" tool, always include the following arguments in the JSON response:
+
+- "query": the clinician's question
+- "sitecode": the site code string
+
+For example:
+
+{
+  "tool": "idsr_check_tool",
+  "args": {
+    "query": "What is the patient's latest lab results?",
+    "sitecode": "32060"
+  }
 }
 
 If no tool is needed, respond directly to the clinician's question in natural language.
@@ -96,7 +132,7 @@ builder.add_edge("tools", "assistant")
 react_graph = builder.compile(checkpointer=memory)
 
 
-def chat_with_patient(question: str, thread_id: str = None):  # type: ignore
+def chat_with_patient(question: str, patient_id: str, sitecode: str, thread_id: str = None):  # type: ignore
     if thread_id is None or thread_id == "":
         thread_id = str(uuid.uuid4())
 
@@ -104,9 +140,14 @@ def chat_with_patient(question: str, thread_id: str = None):  # type: ignore
 
     print(question)
 
+    # get first five characters of sitecode_selection
+    sitecode_selected = sitecode[:5]
+
     # First turn: initialize state
     input_state: AppState = {
-        "messages": [HumanMessage(content=question)]
+        "messages": [HumanMessage(content=question)],
+        "pk_hash": patient_id,
+        "sitecode": sitecode_selected,
     }
 
     config = {"configurable": {"thread_id": thread_id, "user_id": thread_id}}
@@ -127,9 +168,26 @@ with gr.Blocks() as app:
         # Clinician Assistant
         Welcome! Enter your clinical question below. The assistant can access HIV guidelines, patient data, and disease surveillance tools.
 
-        **Note**: This is a prototype tool. There is mock data for one patient who is located in Migori County.
+        **Note**: This is a prototype tool. There is mock data for ten fictitious patients and a mix of counties to select from (for regional variation in IDSR symptom checking).
         """
     )
+
+    gr.Markdown("### Select Patient Context")
+    with gr.Row():
+        id_selected = gr.Dropdown(
+            choices=[None] + [str(i) for i in range(1, 11)], label="Fake ID Number"
+        )
+        sitecode_selection = gr.Dropdown(
+            choices=[
+                "32060 - Migori",
+                "32046 - Machakos",
+                "32029 - Nairobi",
+                "31660 - Mombasa",
+                "31450 - Samburu",
+            ],
+            label="Site Code",
+        )
+
     question_input = gr.Textbox(label="Question")
     thread_id_state = gr.State()
     output_chat = gr.Textbox(label="Assistant Response")
@@ -138,7 +196,7 @@ with gr.Blocks() as app:
 
     submit_btn.click(  # pylint: disable=no-member
         chat_with_patient,
-        inputs=[question_input, thread_id_state],
+        inputs=[question_input, id_selected, sitecode_selection, thread_id_state],
         outputs=[output_chat, thread_id_state],
     )
 

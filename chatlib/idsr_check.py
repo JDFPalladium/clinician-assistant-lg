@@ -10,7 +10,8 @@ import json
 import math
 from collections import Counter
 import sqlite3
-import os
+
+# import os
 
 
 with open("./guidance_docs/idsr_keywords.txt", "r", encoding="utf-8") as f:
@@ -41,15 +42,6 @@ keyword_weights = {
     kw: math.log(total_docs / (1 + count)) for kw, count in keyword_doc_counts.items()
 }
 
-## prepare to get location data
-# first, get sitecode from environment variable
-sitecode = os.environ.get("SITECODE")
-# next, connect to location database and get county where code = sitecode
-county_conn = sqlite3.connect('data/location_data.sqlite')
-county_cursor = county_conn.cursor()
-county_cursor.execute("SELECT County FROM sitecode_county_xwalk WHERE Code = ?", (sitecode,))
-county = county_cursor.fetchone()
-county_conn.close()
 
 def score_doc(doc_to_score, matched_keywords):
     doc_keywords = set(doc_to_score.metadata.get("matched_keywords", []))
@@ -127,7 +119,7 @@ def hybrid_search_with_query_keywords(
     return list(merged.values())
 
 
-def idsr_check(query: str, llm) -> AppState:
+def idsr_check(query: str, llm, sitecode) -> AppState:
     """
     Perform hybrid search combining semantic search and keyword matching.
 
@@ -141,22 +133,30 @@ def idsr_check(query: str, llm) -> AppState:
     results = hybrid_search_with_query_keywords(
         query, vectorstore, tagged_documents, keywords, llm
     )
-    
+
+    ## prepare to get location data
+    # first, get sitecode from environment variable
+    # sitecode = os.environ.get("SITECODE")
+    # next, connect to location database and get county where code = sitecode
+    conn = sqlite3.connect("data/location_data.sqlite")
+    county_cursor = conn.cursor()
+    county_cursor.execute(
+        "SELECT County FROM sitecode_county_xwalk WHERE Code = ?", (sitecode,)
+    )
+    county = county_cursor.fetchone()
+
     # set up connection to location database and get EpidemicInfo for any diseases in the disease_name metadata field of the results from the hybrid search
-    conn_epi = sqlite3.connect('data/location_data.sqlite')
-    cursor_epi = conn_epi.cursor()
+    cursor_epi = conn.cursor()
     disease_names = [doc.metadata.get("disease_name") for doc in results]
     placeholders = ",".join("?" * len(disease_names))
     query_str = f"SELECT Disease, EpidemicInfo FROM who_bulletin WHERE Disease IN ({placeholders})"
     cursor_epi.execute(query_str, disease_names)
     epidemic_info = cursor_epi.fetchall()
-    conn_epi.close()
 
     # print(doc.metadata.get("disease_name") for doc in results)
 
     # set up connection to location database and county-specific disease prevalence and seasonality information for any diseases in the disease_name metadata field of the results from the hybrid search
-    conn_disease = sqlite3.connect('data/location_data.sqlite')
-    cursor_disease = conn_disease.cursor()
+    cursor_disease = conn.cursor()
     if county:  # Ensure county is not None
         county_name = county[0]
         disease_names = [doc.metadata.get("disease_name") for doc in results]
@@ -168,13 +168,17 @@ def idsr_check(query: str, llm) -> AppState:
         # Get climate information for the county from the rainy seasons table
         # Get the current month
         from datetime import datetime
+
         current_month = datetime.now().strftime("%B")  # Full month name, e.g. "March"
-        cursor_disease.execute("SELECT RainySeason FROM county_rainy_seasons WHERE County = ? and Month = ?", (county_name, current_month))
+        cursor_disease.execute(
+            "SELECT RainySeason FROM county_rainy_seasons WHERE County = ? and Month = ?",
+            (county_name, current_month),
+        )
         rainy_season = cursor_disease.fetchone()
         rainy_season = rainy_season[0] if rainy_season else "Unknown"
 
-        # close the connection
-        conn_disease.close()
+    # close the connection
+    conn.close()
 
     disease_definitions = "\n\n".join(
         [
@@ -182,7 +186,6 @@ def idsr_check(query: str, llm) -> AppState:
             for doc in results
         ]
     )
-
 
     prompt = """
     You are a medical assistant reviewing a brief clinical case in Kenya to help identify which diseases the patient may plausibly have. 
@@ -228,10 +231,25 @@ def idsr_check(query: str, llm) -> AppState:
 
 
     """.format(
-        query=query, disease_definitions=disease_definitions, county_name=county_name if county else "Unknown County",
+        query=query,
+        disease_definitions=disease_definitions,
+        county_name=county_name if county else "Unknown County",
         rainy_season=rainy_season if county else "Unknown",
-        county_info="\n".join([f"- {row[0]}, {row[1]}, Prevalence: {row[2]}, Notes: {row[3]}" for row in county_info]) if county else "No county information available.",
-        epidemic_info="\n".join([f"- {row[0]}: {row[1]}" for row in epidemic_info]) if epidemic_info else "No epidemic information available."
+        county_info=(
+            "\n".join(
+                [
+                    f"- {row[0]}, {row[1]}, Prevalence: {row[2]}, Notes: {row[3]}"
+                    for row in county_info
+                ]
+            )
+            if county
+            else "No county information available."
+        ),
+        epidemic_info=(
+            "\n".join([f"- {row[0]}: {row[1]}" for row in epidemic_info])
+            if epidemic_info
+            else "No epidemic information available."
+        ),
     )
     print(prompt)
     llm_response = llm.invoke(prompt)
@@ -243,21 +261,43 @@ def idsr_check(query: str, llm) -> AppState:
 
     # Set up context to return.
     # First, use an LLM to identify which diseases from disease_definitions were mentioned in the answer_text
-    disease_names_in_answer = [doc.metadata.get("disease_name") for doc in results if doc.metadata.get("disease_name") in answer_text]
+    disease_names_in_answer = [
+        doc.metadata.get("disease_name")
+        for doc in results
+        if doc.metadata.get("disease_name") in answer_text
+    ]
     # Next, filter the results to only include those diseases
-    filtered_results = [doc for doc in results if doc.metadata.get("disease_name") in disease_names_in_answer]
+    filtered_results = [
+        doc
+        for doc in results
+        if doc.metadata.get("disease_name") in disease_names_in_answer
+    ]
     # Finally, create context string with only those diseases, plus any county_info and epidemic_info
     context_parts = []
     if filtered_results:
-        context_parts.append("### Disease Definitions:\n" + "\n\n".join(
-            [
-                f"### Disease: {doc.metadata.get('disease_name', 'Unknown Disease')}:\n{doc.page_content}"
-                for doc in filtered_results
-            ]
-        ))
+        context_parts.append(
+            "### Disease Definitions:\n"
+            + "\n\n".join(
+                [
+                    f"### Disease: {doc.metadata.get('disease_name', 'Unknown Disease')}:\n{doc.page_content}"
+                    for doc in filtered_results
+                ]
+            )
+        )
     if county and county_info:
-        context_parts.append("### County Disease Information:\n" + "\n".join([f"- {row[0]}, {row[1]}, Prevalence: {row[2]}, Seasonality: {row[3]}" for row in county_info]))
+        context_parts.append(
+            "### County Disease Information:\n"
+            + "\n".join(
+                [
+                    f"- {row[0]}, {row[1]}, Prevalence: {row[2]}, Seasonality: {row[3]}"
+                    for row in county_info
+                ]
+            )
+        )
     if epidemic_info:
-        context_parts.append("### Epidemic Information:\n" + "\n".join([f"- {row[0]}: {row[1]}" for row in epidemic_info]))
+        context_parts.append(
+            "### Epidemic Information:\n"
+            + "\n".join([f"- {row[0]}: {row[1]}" for row in epidemic_info])
+        )
 
     return {"answer": answer_text, "last_tool": "idsr_check", "context": context_parts}  # type: ignore

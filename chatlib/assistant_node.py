@@ -36,6 +36,8 @@ def assistant(state: AppState, sys_msg, llm, llm_with_tools) -> AppState:
 
     # Initialize missing keys with defaults
     state.setdefault("question", "")
+    state.setdefault("pk_hash", "")
+    state.setdefault("sitecode", "")
     state.setdefault("rag_result", "")
     state.setdefault("answer", "")
     state.setdefault("last_answer", None)
@@ -52,6 +54,32 @@ def assistant(state: AppState, sys_msg, llm, llm_with_tools) -> AppState:
     messages = state.get("messages", [])
     base_messages = [sys_msg]
     messages = base_messages + [m for m in messages if not isinstance(m, SystemMessage)]
+
+    # Filter out existing pk_hash and sitecode system messages and add new ones
+    messages = [
+        m
+        for m in messages
+        if not (
+            isinstance(m, SystemMessage)
+            and (
+                m.content.startswith("Patient identifier (pk_hash):")
+                or m.content.startswith("Site code:")
+            )
+        )
+    ]
+
+    # Inject pk_hash and sitecode as system messages if they exist and are non-empty
+    pk_hash_value = state.get("pk_hash")
+    if pk_hash_value:
+        pk_hash_msg = SystemMessage(
+            content=f"Patient identifier (pk_hash): {pk_hash_value}"
+        )
+        messages.append(pk_hash_msg)
+
+    sitecode_value = state.get("sitecode")
+    if sitecode_value:
+        sitecode_msg = SystemMessage(content=f"Site code: {sitecode_value}")
+        messages.append(sitecode_msg)
 
     latest_question = next(
         (m.content for m in reversed(messages) if isinstance(m, HumanMessage)), ""
@@ -81,7 +109,9 @@ def assistant(state: AppState, sys_msg, llm, llm_with_tools) -> AppState:
                     if new_context is not None and new_context != old_context:
                         state["context"] = new_context
                         state["context_versions"][tool_name] = old_version + 1
-                        state["context_first_response_sent"] = False  # Reset flag on new context
+                        state["context_first_response_sent"] = (
+                            False  # Reset flag on new context
+                        )
 
                     state["last_tool"] = tool_name
 
@@ -98,7 +128,10 @@ def assistant(state: AppState, sys_msg, llm, llm_with_tools) -> AppState:
     last_injected_version = state["last_context_injected_versions"].get(tool_name, 0)
 
     # On turns where user message is unchanged, advance ready_for_injection to current_version
-    if not user_message_changed and state["context_version_ready_for_injection"] < current_version:
+    if (
+        not user_message_changed
+        and state["context_version_ready_for_injection"] < current_version
+    ):
         state["context_version_ready_for_injection"] = current_version
 
     # Inject context system message only if:
@@ -121,7 +154,9 @@ def assistant(state: AppState, sys_msg, llm, llm_with_tools) -> AppState:
         )
         messages.append(context_msg)
 
-        state["last_context_injected_versions"][tool_name] = state["context_version_ready_for_injection"]
+        state["last_context_injected_versions"][tool_name] = state[
+            "context_version_ready_for_injection"
+        ]
         state["last_tool"] = None
 
     # Invoke LLM with tools (this returns AIMessage with tool_calls if tool call is needed)
@@ -164,7 +199,10 @@ def assistant(state: AppState, sys_msg, llm, llm_with_tools) -> AppState:
         state["idsr_disclaimer_shown"] = True
 
     # After generating AI message, mark first response sent
-    if state.get("last_tool") == tool_name or state.get("context_first_response_sent") is False:
+    if (
+        state.get("last_tool") == tool_name
+        or state.get("context_first_response_sent") is False
+    ):
         state["context_first_response_sent"] = True
 
     # Replace the last AIMessage content with final_content to avoid duplicates
