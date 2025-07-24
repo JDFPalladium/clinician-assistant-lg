@@ -197,9 +197,11 @@ def idsr_check(query: str, llm, sitecode) -> AppState:
     1. Carefully compare the case description to each disease definition, taking into account the prevalence and seasonality information.
     2. If a disease seems like a possible match based on the available information, list it and explain why.
     3. Only include rare diseases, or diseases that don't fit seasonally, if the match is extremely strong. Prioritize common and plausible conditions.
-    4. You don't need to suggest matches if none of the diseases seem relevant.
-    5. Ask clarifying questions to make better match suggestions. Possible questions might include asking about specific symptoms, demographic characteristics, exposures, or travel history.
-    6. At the end, give a brief recommendation on next steps, such as monitoring for certain conditions or gathering additional history.
+    4. Only list diseases if there are plausible matches based on the case and context. If no plausible matches are found, do not list any diseases.
+    5. If the information provided is insufficient or ambiguous, prioritize asking clarifying questions before making any recommendations.
+    6. Clarifying questions may include inquiries about specific symptoms, patient demographics, exposures, travel history, or other relevant clinical details.
+    7. Provide a brief recommendation on next steps only if confident matches are identified or after clarifications are obtained.
+
 
     ## Case:
     {query}
@@ -218,16 +220,13 @@ def idsr_check(query: str, llm, sitecode) -> AppState:
 
     ## Expected Output
 
-    Possible matches:
-    - Disease 1: Explanation
-    - Disease 2: Explanation
-    - Disease 3: Explanation
-    
-    Clarifying questions:
-    - Question 1
-    - Question 2
+    If applicable, list possible disease matches with explanations.
 
-    Recommendation on next steps:
+    If needed, list clarifying questions to better understand the case.
+
+    Provide a brief recommendation on next steps if appropriate.
+
+    If no matches or recommendations are possible, focus on clarifying questions.
 
 
     """.format(

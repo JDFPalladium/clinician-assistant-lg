@@ -12,10 +12,10 @@ dependencies = [
     "langchain-community>=0.3.27",
     "langchain-openai>=0.3.27",
     "langgraph>=0.5.2",
-    "llama-index>=0.12.48",
+    "llama-index",
     "pandas>=2.3.1",
     "pylint>=3.3.7",
-    "python-dotenv>=1.1.1",
+    "python-dotenv>=1.1.1"
 ]
 
 [dependency-groups]
@@ -24,3 +24,9 @@ dev = [
     "mypy>=1.16.1",
     "pytest>=8.4.1",
 ]
+
+[tool.setuptools.packages.find]
+include = ["chatlib"]
+
+[tool.uv.sources]
+llama-index = { git = "https://github.com/jerryjliu/llama_index.git", rev = "v0.12.48" }

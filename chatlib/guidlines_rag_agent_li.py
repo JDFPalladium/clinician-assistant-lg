@@ -1,30 +1,100 @@
-from llama_index.core import StorageContext, load_index_from_storage
+from llama_index.core import StorageContext, load_index_from_storage, QueryBundle
+from llama_index.core.postprocessor import LLMRerank
+from llama_index.core.retrievers import VectorIndexRetriever
+from llama_index.llms.openai import OpenAI
 from .state_types import AppState
+from langchain_core.prompts import ChatPromptTemplate
+import numpy as np
+import pandas as pd
+from llama_index.embeddings.openai import OpenAIEmbedding
 
+# load vectorstore summaries
+embeddings = np.load("guidance_docs/lp/summary_embeddings/embeddings.npy")
+df = pd.read_csv("guidance_docs/lp/summary_embeddings/index.tsv", sep="\t")
 
-storage_context = StorageContext.from_defaults(persist_dir="guidance_docs/arv_metadata")
-index = load_index_from_storage(storage_context)
-retriever = index.as_retriever(
-    similarity_top_k=5,
-    similarity_threshold=0.5,
-)
+embedding_model = OpenAIEmbedding()
 
+# Define your reranker-compatible LLM
+llm_llama = OpenAI(model="gpt-4o", temperature=0.0)
+
+# Create LLM reranker
+reranker = LLMRerank(llm=llm_llama, top_n=5)
+
+# Define a prompt template for query expansion
+query_expansion_prompt = ChatPromptTemplate.from_messages([
+    ("system", "You are an expert in HIV medicine."),
+    ("user", (
+        "Given the query below, provide a concise, comma-separated list of related terms and synonyms "
+        "useful for document retrieval. Return only the list, no explanations.\n\n"
+        "Query: {query}"
+    ))
+])
+
+def expand_query(query: str, llm) -> str:
+    messages = query_expansion_prompt.format_messages(query=query)
+    response = llm.invoke(messages)
+    expanded = response.content.strip()
+    # If output is multiline list, convert to comma-separated string
+    if "\n" in expanded:
+        lines = [line.strip("- ").strip() for line in expanded.splitlines() if line.strip()]
+        expanded = ", ".join(lines)
+    print(f"Expanded query: {expanded}")
+    return expanded
+
+def cosine_similarity_numpy(query_vec: np.ndarray, matrix: np.ndarray) -> np.ndarray:
+    # Normalize the query vector and the matrix
+    query_norm = query_vec / np.linalg.norm(query_vec)
+    matrix_norm = matrix / np.linalg.norm(matrix, axis=1, keepdims=True)
+    
+    # Dot product gives cosine similarity
+    return matrix_norm @ query_norm
 
 def rag_retrieve(query: str, llm) -> AppState:
     """Perform RAG search of repository containing authoritative information on HIV/AIDS in Kenya."""
-    user_prompt = query
-    sources = retriever.retrieve(user_prompt)
-    retrieved_text = "\n\n".join(
-        [f"Source {i+1}: {source.text}" for i, source in enumerate(sources)]
-    )
+    
+    # Step 1: Expand the user query
+    query_bundle = QueryBundle(query) # use original query for reranking
+    expanded_query = expand_query(query, llm)
 
+    # Embed the expanded query and find similar summaries
+    query_embedding = embedding_model.get_text_embedding(expanded_query)
+    similarities = cosine_similarity_numpy(query_embedding, embeddings)
+    top_indices = similarities.argsort()[-5:][::-1]
+    selected_paths = df.loc[top_indices, "vectorestore_path"].tolist()
+    print(f"Selected paths for retrieval: {selected_paths}")
+
+    # For each path in selected paths, load the index and retrieve documents
+    all_sources = []
+    for path in selected_paths:
+        storage_context = StorageContext.from_defaults(persist_dir=path)
+        index = load_index_from_storage(storage_context)
+        raw_retriever = VectorIndexRetriever(index=index, similarity_top_k=3)
+        sources_raw = raw_retriever.retrieve(expanded_query)
+        all_sources.extend(sources_raw)
+
+    # Run retrieval (vector search) and reranking manually
+    print(f"Retrieved {len(all_sources)} raw sources from vector search.")
+    sources = reranker.postprocess_nodes(all_sources, query_bundle)
+    print(f"Retrieved {len(sources)} sources after reranking.")
+    if not sources:
+        return {
+            "rag_result": "No relevant information found in the sources. Please try rephrasing your question.",
+            "last_tool": "rag_retrieve"
+        }
+    retrieved_text = "\n\n".join([
+        f"Source {i+1}: {source.text}" for i, source in enumerate(sources)
+    ])
+    
+    
     summarization_prompt = (
-        "Summarize the following HIV/AIDS clinical guideline information, "
-        "highlighting key points relevant to the clinician's question below:\n\n"
-        f"Question: {user_prompt}\n\n"
-        f"Guideline Text:\n{retrieved_text}"
+        "You're a clinical assistant helping a provider answer a question using HIV/AIDS guidelines.\n\n"
+        f"Question: {query}\n\n"
+        "Provide a detailed summary of the most relevant points to the user question from the following source texts and use bullet points. \n\n"
+        # "If the sources do not contain relevant information, simply say 'No relevant information found in the sources.'\n\n"
+        f"{retrieved_text}"
     )
 
+    print("Prompt length in characters:", len(summarization_prompt))
     summary_response = llm.invoke(summarization_prompt)
 
     return {"rag_result": summary_response.content, "last_tool": "rag_retrieve"}  # type: ignore

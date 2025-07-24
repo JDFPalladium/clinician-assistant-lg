@@ -36,8 +36,8 @@ def sql_chain(query: str, llm, rag_result: str, pk_hash: str) -> dict:
     - rag_result: str - context information from the guidelines retrieval
     The function returns a dict with answer and last_tool keys.
     """
+
     # pk_hash = os.environ.get("PK_HASH")
-    print(pk_hash)
     if not pk_hash:
         raise ValueError("pk_hash is required in state for SQL queries.")
 
