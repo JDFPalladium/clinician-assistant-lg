@@ -9,8 +9,8 @@ import pandas as pd
 from llama_index.embeddings.openai import OpenAIEmbedding
 
 # load vectorstore summaries
-embeddings = np.load("guidance_docs/lp/summary_embeddings/embeddings.npy")
-df = pd.read_csv("guidance_docs/lp/summary_embeddings/index.tsv", sep="\t")
+embeddings = np.load("data/processed/lp/summary_embeddings/embeddings.npy")
+df = pd.read_csv("data/processed/lp/summary_embeddings/index.tsv", sep="\t")
 
 embedding_model = OpenAIEmbedding()
 

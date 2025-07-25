@@ -4,7 +4,7 @@ import re
 from .helpers import dateparser_detect, describe_relative_date
 
 
-def load_kenyan_names(filepath="data/kenyan_names.txt"):
+def load_kenyan_names(filepath="data/processed/kenyan_names.txt"):
     if not Path(filepath).exists():
         return set()
     with open(filepath, "r", encoding="utf-8") as f:

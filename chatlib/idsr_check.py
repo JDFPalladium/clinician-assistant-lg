@@ -14,17 +14,17 @@ import sqlite3
 # import os
 
 
-with open("./guidance_docs/idsr_keywords.txt", "r", encoding="utf-8") as f:
+with open("./data/processed/idsr_keywords.txt", "r", encoding="utf-8") as f:
     keywords = [line.strip() for line in f if line.strip()]
 
 vectorstore = FAISS.load_local(
-    "./guidance_docs/disease_vectorstore",
+    "./data/processed/disease_vectorstore",
     OpenAIEmbeddings(),
     allow_dangerous_deserialization=True,
 )
 
 
-with open("./guidance_docs/tagged_documents.json", "r", encoding="utf-8") as f:
+with open("./data/processed/tagged_documents.json", "r", encoding="utf-8") as f:
     doc_dicts = json.load(f)
 
 tagged_documents = [Document(**d) for d in doc_dicts]
@@ -138,7 +138,7 @@ def idsr_check(query: str, llm, sitecode) -> AppState:
     # first, get sitecode from environment variable
     # sitecode = os.environ.get("SITECODE")
     # next, connect to location database and get county where code = sitecode
-    conn = sqlite3.connect("data/location_data.sqlite")
+    conn = sqlite3.connect("data/processed/location_data.sqlite")
     county_cursor = conn.cursor()
     county_cursor.execute(
         "SELECT County FROM sitecode_county_xwalk WHERE Code = ?", (sitecode,)

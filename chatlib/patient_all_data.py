@@ -41,7 +41,7 @@ def sql_chain(query: str, llm, rag_result: str, pk_hash: str) -> dict:
     if not pk_hash:
         raise ValueError("pk_hash is required in state for SQL queries.")
 
-    conn = sqlite3.connect("data/patient_demonstration.sqlite")
+    conn = sqlite3.connect("data/processed/patient_demonstration.sqlite")
     cursor = conn.cursor()
 
     cursor.execute(
