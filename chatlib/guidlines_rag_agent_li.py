@@ -18,7 +18,7 @@ embedding_model = OpenAIEmbedding()
 llm_llama = OpenAI(model="gpt-4o", temperature=0.0)
 
 # Create LLM reranker
-reranker = LLMRerank(llm=llm_llama, top_n=5)
+reranker = LLMRerank(llm=llm_llama, top_n=3)
 
 # Define a prompt template for query expansion
 query_expansion_prompt = ChatPromptTemplate.from_messages([
@@ -49,6 +49,20 @@ def cosine_similarity_numpy(query_vec: np.ndarray, matrix: np.ndarray) -> np.nda
     # Dot product gives cosine similarity
     return matrix_norm @ query_norm
 
+def format_sources_for_html(sources):
+    html_blocks = []
+    for i, source in enumerate(sources):
+        text = source.text.replace("\n", "<br>").strip()
+        block = f"""
+        <details style='margin-bottom: 1em;'>
+            <summary><strong>Source {i+1}</strong></summary>
+            <div style='margin-top: 0.5em; font-family: monospace;'>{text}</div>
+        </details>
+        """
+        html_blocks.append(block)
+    return "\n".join(html_blocks)
+
+
 def rag_retrieve(query: str, llm) -> AppState:
     """Perform RAG search of repository containing authoritative information on HIV/AIDS in Kenya."""
     
@@ -59,7 +73,7 @@ def rag_retrieve(query: str, llm) -> AppState:
     # Embed the expanded query and find similar summaries
     query_embedding = embedding_model.get_text_embedding(expanded_query)
     similarities = cosine_similarity_numpy(query_embedding, embeddings)
-    top_indices = similarities.argsort()[-5:][::-1]
+    top_indices = similarities.argsort()[-3:][::-1]
     selected_paths = df.loc[top_indices, "vectorestore_path"].tolist()
     print(f"Selected paths for retrieval: {selected_paths}")
 
@@ -81,6 +95,7 @@ def rag_retrieve(query: str, llm) -> AppState:
             "rag_result": "No relevant information found in the sources. Please try rephrasing your question.",
             "last_tool": "rag_retrieve"
         }
+    # Format the retrieved sources for the response (and remove lengthy white space or repeated dashes)
     retrieved_text = "\n\n".join([
         f"Source {i+1}: {source.text}" for i, source in enumerate(sources)
     ])
@@ -97,4 +112,7 @@ def rag_retrieve(query: str, llm) -> AppState:
     print("Prompt length in characters:", len(summarization_prompt))
     summary_response = llm.invoke(summarization_prompt)
 
-    return {"rag_result": summary_response.content, "last_tool": "rag_retrieve"}  # type: ignore
+    return {"rag_result": summary_response.content,
+            "rag_sources": format_sources_for_html(sources),
+            "last_tool": "rag_retrieve"
+        }  # type: ignore

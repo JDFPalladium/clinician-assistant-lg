@@ -11,6 +11,7 @@ class AppState(TypedDict):
     pk_hash: str
     sitecode: str
     rag_result: str
+    rag_sources: Optional[str]  # Added to store retrieved sources
     answer: str
     last_answer: Optional[str] = None
     last_user_message: Optional[str] = None

@@ -31,6 +31,7 @@ def rag_retrieve_tool(query):
     result = rag_retrieve(query, llm=llm)
     return {
         "rag_result": result.get("rag_result", ""),
+        "rag_sources": result.get("rag_sources", []),
         "last_tool": "rag_retrieve",
     }
 
@@ -164,7 +165,7 @@ def chat_with_patient(question: str, patient_id: str, sitecode: str, thread_id: 
 
     assistant_message = output_state["messages"][-1].content
 
-    return assistant_message, thread_id
+    return assistant_message, thread_id, output_state.get("rag_sources", "")
 
 def init_session():
     return str(uuid.uuid4())
@@ -195,16 +196,19 @@ with gr.Blocks() as app:
             label="Sitecode",
         )
 
+    gr.Markdown("### Ask a Clinical Question")
     question_input = gr.Textbox(label="Question")
     thread_id_state = gr.State(init_session())
     output_chat = gr.Textbox(label="Assistant Response")
+
+    retrieved_sources_display = gr.HTML(label="Retrieved Sources (if applicable)")
 
     submit_btn = gr.Button("Ask")
 
     submit_btn.click(  # pylint: disable=no-member
         chat_with_patient,
         inputs=[question_input, id_selected, sitecode_selection, thread_id_state],
-        outputs=[output_chat, thread_id_state],
+        outputs=[output_chat, thread_id_state, retrieved_sources_display],
     )
 
 app.launch(

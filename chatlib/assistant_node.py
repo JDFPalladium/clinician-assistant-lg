@@ -39,6 +39,7 @@ def assistant(state: AppState, sys_msg, llm, llm_with_tools) -> AppState:
     state.setdefault("pk_hash", "")
     state.setdefault("sitecode", "")
     state.setdefault("rag_result", "")
+    state.setdefault("rag_sources", "")
     state.setdefault("answer", "")
     state.setdefault("last_answer", None)
     state.setdefault("last_user_message", None)
@@ -176,9 +177,14 @@ def assistant(state: AppState, sys_msg, llm, llm_with_tools) -> AppState:
     elif state.get("rag_result"):
         # Use conversation history + a system message to inject RAG guidance
         rag_msg = SystemMessage(
-            content="The following clinical guidelines may help answer the user's question:\n\n"
-            f"{state['rag_result']}\n\n"
-            "Use this information when responding."
+            content = (
+                "Based on the following clinical guideline excerpts, answer the clinician's question as precisely as possible.\n\n"
+                "Focus only on information that directly addresses the question.\n"
+                "Do not include background or general recommendations unless they are explicitly relevant.\n\n"
+                "Guideline excerpts:\n"
+                f"{state['rag_result']}\n\n"
+                "Respond with a focused summary tailored to the question about advanced HIV disease."
+            )
         )
         messages_with_rag = messages + [rag_msg]
         llm_response = llm.invoke(messages_with_rag)
