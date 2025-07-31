@@ -13,9 +13,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     cmake \
     libopenblas-dev \
     liblapack-dev \
+    libgomp1 \
     gfortran \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
+
 
 # Create and set working directory
 WORKDIR /app
