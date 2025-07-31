@@ -81,5 +81,5 @@ def idsr_define(query: str, llm) -> dict:
             }
 
     return {
-        "answer": f"Sorry, no case definition was found for the selected disease."
+        "answer": "Sorry, no case definition was found for the selected disease."
     }
