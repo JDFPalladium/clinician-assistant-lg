@@ -22,6 +22,7 @@ from chatlib.state_types import AppState
 from chatlib.guidlines_rag_agent_li import rag_retrieve
 from chatlib.patient_all_data import sql_chain
 from chatlib.idsr_check import idsr_check
+from chatlib.idsr_definition import idsr_define
 from chatlib.phi_filter import detect_and_redact_phi
 from chatlib.assistant_node import assistant
 
@@ -52,8 +53,15 @@ def idsr_check_tool(query, sitecode):
         "context": result.get("context", None),
     }
 
+def idsr_define_tool(query):
+    """Retrieve disease definition based on the query."""
+    result = idsr_define(query, llm=llm)
+    return {
+        "answer": result.get("answer", ""),
+        "last_tool": "idsr_define"
+    }
 
-tools = [rag_retrieve_tool, sql_chain_tool, idsr_check_tool]
+tools = [rag_retrieve_tool, sql_chain_tool, idsr_check_tool, idsr_define_tool]
 llm_with_tools = llm.bind_tools(tools)
 
 
@@ -61,11 +69,12 @@ sys_msg = SystemMessage(
     content="""
 You are a helpful assistant supporting clinicians during patient visits. When a patient ID is provided, the clinician is meeting with that HIV-positive patient and may inquire about their history, lab results, or medications. If no patient ID is provided, the clinician may be asking general HIV clinical questions or presenting symptoms for a new patient.
 
-You have access to three tools to help you answer the clinician's questions. 
+You have access to four tools to help you answer the clinician's questions. 
 
-- rag_retrieve: to access HIV clinical guidelines
-- sql_chain: to access HIV data about the patient with whom the clinician is meeting. For straightforward factual questions about the patient, you may call sql_chain directly. For questions requiring clinical interpretation or classification, first call rag_retrieve to get relevant clinical guideline context, then include that context when calling sql_chain.
-- idsr_check: to check if the patient case description matches any known diseases. 
+- rag_retrieve_tool: to access HIV clinical guidelines
+- sql_chain_tool: to access HIV data about the patient with whom the clinician is meeting. For straightforward factual questions about the patient, you may call sql_chain directly. For questions requiring clinical interpretation or classification, first call rag_retrieve to get relevant clinical guideline context, then include that context when calling sql_chain.
+- idsr_check_tool: to check if the patient case description matches any known diseases.
+- idsr_define_tool: to retrieve the official case definition of a disease when the clinician asks about it (e.g., “What is the description of cholera?”). Do not use this tool for analyzing symptom descriptions — use `idsr_check_tool` for that.
 
 When a tool is needed, respond only with a JSON object specifying the tool to call and its minimal arguments, for example:
 {
@@ -104,6 +113,19 @@ For example:
   "args": {
     "query": "What is the patient's latest lab results?",
     "sitecode": "32060"
+  }
+}
+
+When calling the "idsr_define_tool" tool, always include the following arguments in the JSON response:
+
+- "query": the clinician's question
+
+For example:
+
+{
+  "tool": "idsr_define_tool",
+  "args": {
+    "query": "What is the description of cholera?"
   }
 }
 
