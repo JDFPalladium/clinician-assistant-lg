@@ -26,8 +26,9 @@ WORKDIR /app
 COPY requirements.txt .
 
 # Install Python dependencies with retries
-RUN pip install --no-cache-dir --retries 10 \
-    -r requirements.txt
+RUN echo "Installing Python dependencies..." && \
+    pip install --no-cache-dir --verbose -r requirements.txt
+
 
 # Copy application files
 COPY . .
