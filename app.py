@@ -165,7 +165,7 @@ def chat_with_patient(question: str, patient_id: str, sitecode: str, thread_id: 
 
     assistant_message = output_state["messages"][-1].content
 
-    return assistant_message, thread_id, output_state.get("rag_sources", "")
+    return assistant_message, thread_id, output_state.get("rag_sources", ""), ""
 
 def init_session():
     new_id = str(uuid.uuid4())
@@ -210,7 +210,13 @@ with gr.Blocks() as app:
     submit_btn.click(  # pylint: disable=no-member
         chat_with_patient,
         inputs=[question_input, id_selected, sitecode_selection, thread_id_state],
-        outputs=[output_chat, thread_id_state, retrieved_sources_display],
+        outputs=[output_chat, thread_id_state, retrieved_sources_display, question_input],
+    )
+
+    question_input.submit(
+        chat_with_patient,
+        inputs=[question_input, id_selected, sitecode_selection, thread_id_state],
+        outputs=[output_chat, thread_id_state, retrieved_sources_display, question_input],
     )
 
 app.launch(
