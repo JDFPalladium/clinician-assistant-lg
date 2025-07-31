@@ -168,7 +168,9 @@ def chat_with_patient(question: str, patient_id: str, sitecode: str, thread_id: 
     return assistant_message, thread_id, output_state.get("rag_sources", "")
 
 def init_session():
-    return str(uuid.uuid4())
+    new_id = str(uuid.uuid4())
+    print(f"New session ID: {new_id}")
+    return new_id
 
 with gr.Blocks() as app:
     gr.Markdown(
@@ -198,7 +200,7 @@ with gr.Blocks() as app:
 
     gr.Markdown("### Ask a Clinical Question")
     question_input = gr.Textbox(label="Question")
-    thread_id_state = gr.State(init_session())
+    thread_id_state = gr.State(init_session)
     output_chat = gr.Textbox(label="Assistant Response")
 
     retrieved_sources_display = gr.HTML(label="Retrieved Sources (if applicable)")
