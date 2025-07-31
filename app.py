@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 import os
 from langchain_openai import ChatOpenAI
 from langgraph.graph import START, StateGraph
-from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
 from langgraph.prebuilt import tools_condition, ToolNode
 from langgraph.checkpoint.memory import MemorySaver
 
@@ -107,19 +107,23 @@ For example:
   }
 }
 
-Always ask for clarification or more details if the clinician's question is ambiguous or incomplete before calling any tool.
+There are only two cases where a tool is not needed:
+1. If the clinician's question is a simple greeting, farewell, or acknowledgement.
+2. The answer is clearly and completely present in the prior conversation turns.
 
-If no tool is needed, such as when the user provides a simple greeting or acknowledgement, respond directly to the clinician's question in natural language.
+If a tool is not needed, respond directly in natural language.
 
-Do not pass the entire state as an argument.
+If the clinician's question or intent is ambiguous, ask a clarifying question before invoking a tool.
 
-Keep responses concise and focused. The clinician is a healthcare professional; do not suggest consulting one.
+Never include text outside the JSON object when invoking a tool.
+
+Never use your general knowledge to answer medical questions.
 
 Do not reference PHI (Protected Health Information) in your responses.
 
-If the question is outside your scope, respond with "I'm sorry, I cannot assist with that request."
+Keep responses concise and focused. The clinician is a healthcare professional; do not suggest consulting one.
 
-Do not include any text outside the JSON response.
+If the question is outside your scope, respond with "I'm sorry, I cannot assist with that request."
 """
 )
 
@@ -165,7 +169,25 @@ def chat_with_patient(question: str, patient_id: str, sitecode: str, thread_id: 
 
     assistant_message = output_state["messages"][-1].content
 
-    return assistant_message, thread_id, output_state.get("rag_sources", ""), ""
+    # Cleaned history: Human + AI only
+    chat_history_html = """
+    <div style='
+        border:1px solid #ccc;
+        border-radius:6px;
+        padding:10px;
+        background-color:#f9f9f9;
+        max-height:300px;
+        overflow-y:auto;
+    '>
+    """
+    for m in output_state["messages"]:
+        if isinstance(m, HumanMessage):
+            chat_history_html += f"<strong>You:</strong> {m.content}<br><br>"
+        elif isinstance(m, AIMessage):
+            chat_history_html += f"<strong>Assistant:</strong> {m.content}<br><br>"
+    chat_history_html += "</div>"
+
+    return assistant_message, thread_id, output_state.get("rag_sources", ""), "", chat_history_html
 
 def init_session():
     new_id = str(uuid.uuid4())
@@ -203,20 +225,22 @@ with gr.Blocks() as app:
     thread_id_state = gr.State(init_session)
     output_chat = gr.Textbox(label="Assistant Response")
 
-    retrieved_sources_display = gr.HTML(label="Retrieved Sources (if applicable)")
-
     submit_btn = gr.Button("Ask")
+
+    chat_history_display = gr.HTML()
+
+    retrieved_sources_display = gr.HTML(label="Retrieved Sources (if applicable)")
 
     submit_btn.click(  # pylint: disable=no-member
         chat_with_patient,
         inputs=[question_input, id_selected, sitecode_selection, thread_id_state],
-        outputs=[output_chat, thread_id_state, retrieved_sources_display, question_input],
+        outputs=[output_chat, thread_id_state, retrieved_sources_display, question_input, chat_history_display],
     )
 
     question_input.submit(
         chat_with_patient,
         inputs=[question_input, id_selected, sitecode_selection, thread_id_state],
-        outputs=[output_chat, thread_id_state, retrieved_sources_display, question_input],
+        outputs=[output_chat, thread_id_state, retrieved_sources_display, question_input, chat_history_display],
     )
 
 app.launch(
