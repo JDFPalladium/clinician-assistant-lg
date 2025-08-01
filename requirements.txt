@@ -9,3 +9,10 @@ llama-index==0.12.48
 pandas>=2.3.1
 pylint>=3.3.7
 python-dotenv>=1.1.1
+accelerate>=1.9.0
+transformers>=4.54.1
+torch>=2.7.1
+sentencepiece>=0.2.0
+pyopenssl>=25.1.0
+protobuf>=6.31.1
+certifi>=2025.7.14

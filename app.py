@@ -18,6 +18,7 @@ os.environ.get("OPENAI_API_KEY")
 
 llm = ChatOpenAI(temperature=0.0, model="gpt-4o")
 
+from chatlib.ner_redact import load_ner_model, process_long_text, validate_offsets, redact_text
 from chatlib.state_types import AppState
 from chatlib.guidlines_rag_agent_li import rag_retrieve
 from chatlib.patient_all_data import sql_chain
@@ -140,8 +141,18 @@ def chat_with_patient(question: str, patient_id: str, sitecode: str, thread_id: 
         thread_id = str(uuid.uuid4())
 
     question = detect_and_redact_phi(question)["redacted_text"]
+    print("\n\n Question after first redact:", question)
+    
+    #load ner model
+    ner = load_ner_model()
+    ents = process_long_text(question, ner)
+    validated_ents = validate_offsets(question, ents)
+    print(f"\n\nValid entities: \n\n {validated_ents}\n\n")
 
-    print(question)
+    safe_text = redact_text(question, validated_ents)
+    print(f"\n\nOriginal text:\n\n {question}\n\n")
+    print(f"\n\nRedacted text:\n\n {safe_text}\n\n")
+    
 
     # get first five characters of sitecode_selection if not none
     if sitecode is None or sitecode == "":
@@ -151,14 +162,14 @@ def chat_with_patient(question: str, patient_id: str, sitecode: str, thread_id: 
 
     # First turn: initialize state
     input_state: AppState = {
-        "messages": [HumanMessage(content=question)],
+        "messages": [HumanMessage(content=safe_text)],
         "pk_hash": patient_id,
         "sitecode": sitecode_selected,
     }
 
     config = {"configurable": {"thread_id": thread_id, "user_id": thread_id}}
 
-    output_state = react_graph.invoke(input_state, config)  # type: ignore
+    output_state = react_graph.invoke(input_state, config)
 
     for m in output_state["messages"]:
         m.pretty_print()
