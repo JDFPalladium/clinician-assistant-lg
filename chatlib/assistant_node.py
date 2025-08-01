@@ -177,7 +177,7 @@ def assistant(state: AppState, sys_msg, llm, llm_with_tools) -> AppState:
     elif state.get("rag_result"):
         # Use conversation history + a system message to inject RAG guidance
         rag_msg = SystemMessage(
-            content = (
+            content=(
                 "Based on the following clinical guideline excerpts, answer the clinician's question as precisely as possible.\n\n"
                 "Focus only on information that directly addresses the question.\n"
                 "Do not include background or general recommendations unless they are explicitly relevant.\n\n"

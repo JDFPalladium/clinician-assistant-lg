@@ -196,3 +196,5 @@ cython_debug/
 config.env
 data/
 guidance_docs/
+*.example.py
+local_model/

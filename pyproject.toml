@@ -5,7 +5,9 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "accelerate>=1.9.0", 
     "black>=25.1.0",
+    "certifi>=2025.7.14",
     "dateparser>=1.2.2",
     "faiss-cpu>=1.11.0",
     "gradio>=5.36.2",
@@ -14,8 +16,13 @@ dependencies = [
     "langgraph>=0.5.2",
     "llama-index",
     "pandas>=2.3.1",
+    "protobuf>=6.31.1",
     "pylint>=3.3.7",
-    "python-dotenv>=1.1.1"
+    "pyopenssl>=25.1.0",
+    "python-dotenv>=1.1.1",
+    "sentencepiece>=0.2.0",
+    "torch>=2.7.1",
+    "transformers>=4.54.1",
 ]
 
 [dependency-groups]
