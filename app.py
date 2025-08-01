@@ -18,7 +18,12 @@ os.environ.get("OPENAI_API_KEY")
 
 llm = ChatOpenAI(temperature=0.0, model="gpt-4o")
 
-from chatlib.ner_redact import load_ner_model, process_long_text, validate_offsets, redact_text
+from chatlib.ner_redact import (
+    load_ner_model,
+    process_long_text,
+    validate_offsets,
+    redact_text,
+)
 from chatlib.state_types import AppState
 from chatlib.guidlines_rag_agent_li import rag_retrieve
 from chatlib.patient_all_data import sql_chain
@@ -142,8 +147,8 @@ def chat_with_patient(question: str, patient_id: str, sitecode: str, thread_id: 
 
     question = detect_and_redact_phi(question)["redacted_text"]
     print("\n\n Question after first redact:", question)
-    
-    #load ner model
+
+    # load ner model
     ner = load_ner_model()
     ents = process_long_text(question, ner)
     validated_ents = validate_offsets(question, ents)
@@ -152,7 +157,6 @@ def chat_with_patient(question: str, patient_id: str, sitecode: str, thread_id: 
     safe_text = redact_text(question, validated_ents)
     print(f"\n\nOriginal text:\n\n {question}\n\n")
     print(f"\n\nRedacted text:\n\n {safe_text}\n\n")
-    
 
     # get first five characters of sitecode_selection if not none
     if sitecode is None or sitecode == "":
@@ -178,8 +182,10 @@ def chat_with_patient(question: str, patient_id: str, sitecode: str, thread_id: 
 
     return assistant_message, thread_id, output_state.get("rag_sources", "")
 
+
 def init_session():
     return str(uuid.uuid4())
+
 
 with gr.Blocks() as app:
     gr.Markdown(
@@ -197,7 +203,8 @@ with gr.Blocks() as app:
             choices=[None] + [str(i) for i in range(1, 11)], label="Fake ID Number"
         )
         sitecode_selection = gr.Dropdown(
-            choices=[None] + [
+            choices=[None]
+            + [
                 "32060 - Migori",
                 "32046 - Machakos",
                 "32029 - Nairobi",
