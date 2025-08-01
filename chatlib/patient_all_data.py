@@ -172,6 +172,9 @@ def sql_chain(query: str, llm, rag_result: str, pk_hash: str) -> dict:
             except (ValueError, TypeError):
                 return "invalid date"
 
+        df = df.copy()
+        df["StartARTDate"] = pd.to_datetime(df["StartARTDate"], errors="coerce")
+
         row = df.iloc[0]
         summary = (
             f"Sex: {safe(row['Sex'])}\n"
@@ -180,7 +183,7 @@ def sql_chain(query: str, llm, rag_result: str, pk_hash: str) -> dict:
             f"Occupation: {safe(row['Occupation'])}\n"
             f"OnIPT: {safe(row['OnIPT'])}\n"
             f"ARTOutcomeDescription: {safe(row['ARTOutcomeDescription'])}\n"
-            f"StartARTDate: {safe(row['StartARTDate'])}\n"
+            f"StartARTDate: {describe_relative_date(row['StartARTDate'])}\n"
             f"Age: {calculate_age(safe(row['DOB']))}"
         )
         return summary

@@ -13,9 +13,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     cmake \
     libopenblas-dev \
     liblapack-dev \
+    libgomp1 \
     gfortran \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
+
 
 # Create and set working directory
 WORKDIR /app
@@ -24,8 +26,9 @@ WORKDIR /app
 COPY requirements.txt .
 
 # Install Python dependencies with retries
-RUN pip install --no-cache-dir --retries 10 \
-    -r requirements.txt
+RUN echo "Installing Python dependencies..." && \
+    pip install --no-cache-dir --verbose -r requirements.txt
+
 
 # Copy application files
 COPY . .
