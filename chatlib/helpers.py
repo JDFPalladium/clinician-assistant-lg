@@ -23,6 +23,7 @@ RELATIVE_INDICATORS = [
     "past",
 ]
 
+
 def is_relative_date(text_relative):
     text_lower = text_relative.lower()
     return any(word in text_lower for word in RELATIVE_INDICATORS)

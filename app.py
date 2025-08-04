@@ -40,10 +40,12 @@ def rag_retrieve_tool(query):
         "last_tool": "rag_retrieve",
     }
 
+
 def sql_chain_tool(query, rag_result, pk_hash):
     """Query patient data from the SQL database and summarize results."""
     result = sql_chain(query, llm=llm, rag_result=rag_result, pk_hash=pk_hash)
     return {"answer": result.get("answer", ""), "last_tool": "sql_chain"}
+
 
 def idsr_check_tool(query, sitecode):
     """Check if the patient case description matches any known diseases."""
@@ -55,13 +57,12 @@ def idsr_check_tool(query, sitecode):
         "context": result.get("context", None),
     }
 
+
 def idsr_define_tool(query):
     """Retrieve disease definition based on the query."""
     result = idsr_define(query, llm=llm)
-    return {
-        "answer": result.get("answer", ""),
-        "last_tool": "idsr_define"
-    }
+    return {"answer": result.get("answer", ""), "last_tool": "idsr_define"}
+
 
 tools = [rag_retrieve_tool, sql_chain_tool, idsr_check_tool, idsr_define_tool]
 llm_with_tools = llm.bind_tools(tools)
@@ -169,8 +170,7 @@ def chat_with_patient(question: str, patient_id: str, sitecode: str, thread_id: 
 
     phi_results = detect_and_redact_phi(question, ner_pipeline=ner_model)
     safe_text = phi_results["redacted_text"]
-    
-    
+
     print(f"\nOriginal question: {question}")
     print(f"Redacted text: {safe_text}")
     if phi_results["phi_detected"]:
@@ -181,7 +181,7 @@ def chat_with_patient(question: str, patient_id: str, sitecode: str, thread_id: 
             print(f"- Dates: {phi_results['dates']}")
         if phi_results["ner_entities"]:
             print(f"- NER entities: {phi_results['ner_entities']}")
-    
+
     # Extract sitecode if provided
     if sitecode is None or sitecode == "":
         sitecode_selected = ""
@@ -227,7 +227,14 @@ def chat_with_patient(question: str, patient_id: str, sitecode: str, thread_id: 
     chat_history_html += "</div>"
 
     # Return outputs
-    return assistant_message, thread_id, output_state.get("rag_sources", ""), "", chat_history_html
+    return (
+        assistant_message,
+        thread_id,
+        output_state.get("rag_sources", ""),
+        "",
+        chat_history_html,
+    )
+
 
 def init_session():
     new_id = str(uuid.uuid4())
@@ -276,13 +283,25 @@ with gr.Blocks() as app:
     submit_btn.click(  # pylint: disable=no-member
         chat_with_patient,
         inputs=[question_input, id_selected, sitecode_selection, thread_id_state],
-        outputs=[output_chat, thread_id_state, retrieved_sources_display, question_input, chat_history_display],
+        outputs=[
+            output_chat,
+            thread_id_state,
+            retrieved_sources_display,
+            question_input,
+            chat_history_display,
+        ],
     )
     # pylint: disable=no-member
     question_input.submit(
         chat_with_patient,
         inputs=[question_input, id_selected, sitecode_selection, thread_id_state],
-        outputs=[output_chat, thread_id_state, retrieved_sources_display, question_input, chat_history_display],
+        outputs=[
+            output_chat,
+            thread_id_state,
+            retrieved_sources_display,
+            question_input,
+            chat_history_display,
+        ],
     )
 
 app.launch(

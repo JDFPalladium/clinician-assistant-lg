@@ -1,3 +1,4 @@
+# pylint: disable=protected-access
 import os
 import ssl
 import certifi
@@ -18,7 +19,7 @@ os.environ["SSL_CERT_FILE"] = certifi.where()
 try:
     ssl._create_default_https_context = lambda: ssl.create_default_context(
         cafile=certifi.where()
-    )  # pylint: disable=protected-access
+    )
 except AttributeError:
     pass
 
@@ -137,10 +138,5 @@ def process_long_text(text: str, ner_pipeline, max_tokens: int = 500) -> list:
 
 def get_entity_placeholder(entity_group: str) -> str:
     """Return specific placeholder for entity type"""
-    placeholders = {
-        "PER": "[name]",
-        "LOC": "[location]",
-        "ORG": "[organization]"
-    }
+    placeholders = {"PER": "[name]", "LOC": "[location]", "ORG": "[organization]"}
     return placeholders.get(entity_group, "[redacted]")
-
