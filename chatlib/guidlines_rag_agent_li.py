@@ -21,14 +21,20 @@ llm_llama = OpenAI(model="gpt-4o", temperature=0.0)
 reranker = LLMRerank(llm=llm_llama, top_n=3)
 
 # Define a prompt template for query expansion
-query_expansion_prompt = ChatPromptTemplate.from_messages([
-    ("system", "You are an expert in HIV medicine."),
-    ("user", (
-        "Given the query below, provide a concise, comma-separated list of related terms and synonyms "
-        "useful for document retrieval. Return only the list, no explanations.\n\n"
-        "Query: {query}"
-    ))
-])
+query_expansion_prompt = ChatPromptTemplate.from_messages(
+    [
+        ("system", "You are an expert in HIV medicine."),
+        (
+            "user",
+            (
+                "Given the query below, provide a concise, comma-separated list of related terms and synonyms "
+                "useful for document retrieval. Return only the list, no explanations.\n\n"
+                "Query: {query}"
+            ),
+        ),
+    ]
+)
+
 
 def expand_query(query: str, llm) -> str:
     messages = query_expansion_prompt.format_messages(query=query)
@@ -36,18 +42,22 @@ def expand_query(query: str, llm) -> str:
     expanded = response.content.strip()
     # If output is multiline list, convert to comma-separated string
     if "\n" in expanded:
-        lines = [line.strip("- ").strip() for line in expanded.splitlines() if line.strip()]
+        lines = [
+            line.strip("- ").strip() for line in expanded.splitlines() if line.strip()
+        ]
         expanded = ", ".join(lines)
     print(f"Expanded query: {expanded}")
     return expanded
+
 
 def cosine_similarity_numpy(query_vec: np.ndarray, matrix: np.ndarray) -> np.ndarray:
     # Normalize the query vector and the matrix
     query_norm = query_vec / np.linalg.norm(query_vec)
     matrix_norm = matrix / np.linalg.norm(matrix, axis=1, keepdims=True)
-    
+
     # Dot product gives cosine similarity
     return matrix_norm @ query_norm
+
 
 def format_sources_for_html(sources):
     html_blocks = []
@@ -65,9 +75,9 @@ def format_sources_for_html(sources):
 
 def rag_retrieve(query: str, llm) -> AppState:
     """Perform RAG search of repository containing authoritative information on HIV/AIDS in Kenya."""
-    
+
     # Step 1: Expand the user query
-    query_bundle = QueryBundle(query) # use original query for reranking
+    query_bundle = QueryBundle(query)  # use original query for reranking
     expanded_query = expand_query(query, llm)
 
     # Embed the expanded query and find similar summaries
@@ -93,14 +103,13 @@ def rag_retrieve(query: str, llm) -> AppState:
     if not sources:
         return {
             "rag_result": "No relevant information found in the sources. Please try rephrasing your question.",
-            "last_tool": "rag_retrieve"
+            "last_tool": "rag_retrieve",
         }
     # Format the retrieved sources for the response (and remove lengthy white space or repeated dashes)
-    retrieved_text = "\n\n".join([
-        f"Source {i+1}: {source.text}" for i, source in enumerate(sources)
-    ])
-    
-    
+    retrieved_text = "\n\n".join(
+        [f"Source {i+1}: {source.text}" for i, source in enumerate(sources)]
+    )
+
     summarization_prompt = (
         "You're a clinical assistant helping a provider answer a question using HIV/AIDS guidelines.\n\n"
         f"Question: {query}\n\n"
@@ -112,7 +121,8 @@ def rag_retrieve(query: str, llm) -> AppState:
     print("Prompt length in characters:", len(summarization_prompt))
     summary_response = llm.invoke(summarization_prompt)
 
-    return {"rag_result": summary_response.content,
-            "rag_sources": format_sources_for_html(sources),
-            "last_tool": "rag_retrieve"
-        }  # type: ignore
+    return {
+        "rag_result": summary_response.content,
+        "rag_sources": format_sources_for_html(sources),
+        "last_tool": "rag_retrieve",
+    }  # type: ignore

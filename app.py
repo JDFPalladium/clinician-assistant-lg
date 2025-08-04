@@ -1,4 +1,8 @@
 # type: ignore
+from chatlib.ner_redact import load_ner_model
+
+ner_model = load_ner_model()
+
 import gradio as gr
 import uuid
 from dotenv import load_dotenv
@@ -53,13 +57,12 @@ def idsr_check_tool(query, sitecode):
         "context": result.get("context", None),
     }
 
+
 def idsr_define_tool(query):
     """Retrieve disease definition based on the query."""
     result = idsr_define(query, llm=llm)
-    return {
-        "answer": result.get("answer", ""),
-        "last_tool": "idsr_define"
-    }
+    return {"answer": result.get("answer", ""), "last_tool": "idsr_define"}
+
 
 tools = [rag_retrieve_tool, sql_chain_tool, idsr_check_tool, idsr_define_tool]
 llm_with_tools = llm.bind_tools(tools)
@@ -165,33 +168,46 @@ def chat_with_patient(question: str, patient_id: str, sitecode: str, thread_id: 
     if thread_id is None or thread_id == "":
         thread_id = str(uuid.uuid4())
 
-    question = detect_and_redact_phi(question)["redacted_text"]
+    phi_results = detect_and_redact_phi(question, ner_pipeline=ner_model)
+    safe_text = phi_results["redacted_text"]
 
-    print(question)
+    print(f"\nOriginal question: {question}")
+    print(f"Redacted text: {safe_text}")
+    if phi_results["phi_detected"]:
+        print("Detected PHI:")
+        if phi_results["kenyan_name_matches"]:
+            print(f"- Kenyan names: {phi_results['kenyan_name_matches']}")
+        if phi_results["dates"]:
+            print(f"- Dates: {phi_results['dates']}")
+        if phi_results["ner_entities"]:
+            print(f"- NER entities: {phi_results['ner_entities']}")
 
-    # get first five characters of sitecode_selection if not none
+    # Extract sitecode if provided
     if sitecode is None or sitecode == "":
         sitecode_selected = ""
     else:
         sitecode_selected = sitecode[:5]
 
-    # First turn: initialize state
+    # Initialize conversation state
     input_state: AppState = {
-        "messages": [HumanMessage(content=question)],
+        "messages": [HumanMessage(content=safe_text)],
         "pk_hash": patient_id,
         "sitecode": sitecode_selected,
     }
 
     config = {"configurable": {"thread_id": thread_id, "user_id": thread_id}}
 
-    output_state = react_graph.invoke(input_state, config)  # type: ignore
+    # Process through LangGraph
+    output_state = react_graph.invoke(input_state, config)
 
+    # Print messages for debugging
     for m in output_state["messages"]:
         m.pretty_print()
 
+    # Get assistant's response
     assistant_message = output_state["messages"][-1].content
 
-    # Cleaned history: Human + AI only
+    # Format chat history for display
     chat_history_html = """
     <div style='
         border:1px solid #ccc;
@@ -199,6 +215,7 @@ def chat_with_patient(question: str, patient_id: str, sitecode: str, thread_id: 
         padding:10px;
         background-color:#f9f9f9;
         max-height:300px;
+        color: black;
         overflow-y:auto;
     '>
     """
@@ -209,12 +226,21 @@ def chat_with_patient(question: str, patient_id: str, sitecode: str, thread_id: 
             chat_history_html += f"<strong>Assistant:</strong> {m.content}<br><br>"
     chat_history_html += "</div>"
 
-    return assistant_message, thread_id, output_state.get("rag_sources", ""), "", chat_history_html
+    # Return outputs
+    return (
+        assistant_message,
+        thread_id,
+        output_state.get("rag_sources", ""),
+        "",
+        chat_history_html,
+    )
+
 
 def init_session():
     new_id = str(uuid.uuid4())
     print(f"New session ID: {new_id}")
     return new_id
+
 
 with gr.Blocks() as app:
     gr.Markdown(
@@ -232,7 +258,8 @@ with gr.Blocks() as app:
             choices=[None] + [str(i) for i in range(1, 11)], label="Fake ID Number"
         )
         sitecode_selection = gr.Dropdown(
-            choices=[None] + [
+            choices=[None]
+            + [
                 "32060 - Migori",
                 "32046 - Machakos",
                 "32029 - Nairobi",
@@ -256,13 +283,25 @@ with gr.Blocks() as app:
     submit_btn.click(  # pylint: disable=no-member
         chat_with_patient,
         inputs=[question_input, id_selected, sitecode_selection, thread_id_state],
-        outputs=[output_chat, thread_id_state, retrieved_sources_display, question_input, chat_history_display],
+        outputs=[
+            output_chat,
+            thread_id_state,
+            retrieved_sources_display,
+            question_input,
+            chat_history_display,
+        ],
     )
     # pylint: disable=no-member
     question_input.submit(
         chat_with_patient,
         inputs=[question_input, id_selected, sitecode_selection, thread_id_state],
-        outputs=[output_chat, thread_id_state, retrieved_sources_display, question_input, chat_history_display],
+        outputs=[
+            output_chat,
+            thread_id_state,
+            retrieved_sources_display,
+            question_input,
+            chat_history_display,
+        ],
     )
 
 app.launch(
