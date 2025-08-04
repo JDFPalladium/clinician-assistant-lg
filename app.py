@@ -1,4 +1,8 @@
 # type: ignore
+from chatlib.ner_redact import load_ner_model
+
+ner_model = load_ner_model()
+
 import gradio as gr
 import uuid
 from dotenv import load_dotenv
@@ -18,12 +22,6 @@ os.environ.get("OPENAI_API_KEY")
 
 llm = ChatOpenAI(temperature=0.0, model="gpt-4o")
 
-from chatlib.ner_redact import (
-    load_ner_model,
-    process_long_text,
-    validate_offsets,
-    redact_text,
-)
 from chatlib.state_types import AppState
 from chatlib.guidlines_rag_agent_li import rag_retrieve
 from chatlib.patient_all_data import sql_chain
@@ -42,12 +40,10 @@ def rag_retrieve_tool(query):
         "last_tool": "rag_retrieve",
     }
 
-
 def sql_chain_tool(query, rag_result, pk_hash):
     """Query patient data from the SQL database and summarize results."""
     result = sql_chain(query, llm=llm, rag_result=rag_result, pk_hash=pk_hash)
     return {"answer": result.get("answer", ""), "last_tool": "sql_chain"}
-
 
 def idsr_check_tool(query, sitecode):
     """Check if the patient case description matches any known diseases."""
@@ -171,26 +167,28 @@ def chat_with_patient(question: str, patient_id: str, sitecode: str, thread_id: 
     if thread_id is None or thread_id == "":
         thread_id = str(uuid.uuid4())
 
-    question = detect_and_redact_phi(question)["redacted_text"]
-    print("\n\n Question after first redact:", question)
-
-    # load ner model
-    ner = load_ner_model()
-    ents = process_long_text(question, ner)
-    validated_ents = validate_offsets(question, ents)
-    print(f"\n\nValid entities: \n\n {validated_ents}\n\n")
-
-    safe_text = redact_text(question, validated_ents)
-    print(f"\n\nOriginal text:\n\n {question}\n\n")
-    print(f"\n\nRedacted text:\n\n {safe_text}\n\n")
-
-    # get first five characters of sitecode_selection if not none
+    phi_results = detect_and_redact_phi(question, ner_pipeline=ner_model)
+    safe_text = phi_results["redacted_text"]
+    
+    
+    print(f"\nOriginal question: {question}")
+    print(f"Redacted text: {safe_text}")
+    if phi_results["phi_detected"]:
+        print("Detected PHI:")
+        if phi_results["kenyan_name_matches"]:
+            print(f"- Kenyan names: {phi_results['kenyan_name_matches']}")
+        if phi_results["dates"]:
+            print(f"- Dates: {phi_results['dates']}")
+        if phi_results["ner_entities"]:
+            print(f"- NER entities: {phi_results['ner_entities']}")
+    
+    # Extract sitecode if provided
     if sitecode is None or sitecode == "":
         sitecode_selected = ""
     else:
         sitecode_selected = sitecode[:5]
 
-    # First turn: initialize state
+    # Initialize conversation state
     input_state: AppState = {
         "messages": [HumanMessage(content=safe_text)],
         "pk_hash": patient_id,
@@ -199,14 +197,17 @@ def chat_with_patient(question: str, patient_id: str, sitecode: str, thread_id: 
 
     config = {"configurable": {"thread_id": thread_id, "user_id": thread_id}}
 
+    # Process through LangGraph
     output_state = react_graph.invoke(input_state, config)
 
+    # Print messages for debugging
     for m in output_state["messages"]:
         m.pretty_print()
 
+    # Get assistant's response
     assistant_message = output_state["messages"][-1].content
 
-    # Cleaned history: Human + AI only
+    # Format chat history for display
     chat_history_html = """
     <div style='
         border:1px solid #ccc;
@@ -214,6 +215,7 @@ def chat_with_patient(question: str, patient_id: str, sitecode: str, thread_id: 
         padding:10px;
         background-color:#f9f9f9;
         max-height:300px;
+        color: black;
         overflow-y:auto;
     '>
     """
@@ -224,8 +226,8 @@ def chat_with_patient(question: str, patient_id: str, sitecode: str, thread_id: 
             chat_history_html += f"<strong>Assistant:</strong> {m.content}<br><br>"
     chat_history_html += "</div>"
 
+    # Return outputs
     return assistant_message, thread_id, output_state.get("rag_sources", ""), "", chat_history_html
-
 
 def init_session():
     new_id = str(uuid.uuid4())

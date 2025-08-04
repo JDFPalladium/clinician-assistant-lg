@@ -133,3 +133,14 @@ def process_long_text(text: str, ner_pipeline, max_tokens: int = 500) -> list:
         chunk_start += len(chunk) + 1
 
     return entities
+
+
+def get_entity_placeholder(entity_group: str) -> str:
+    """Return specific placeholder for entity type"""
+    placeholders = {
+        "PER": "[name]",
+        "LOC": "[location]",
+        "ORG": "[organization]"
+    }
+    return placeholders.get(entity_group, "[redacted]")
+

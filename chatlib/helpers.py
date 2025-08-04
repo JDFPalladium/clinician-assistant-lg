@@ -2,6 +2,9 @@ import dateparser
 import dateparser.search
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
+from pathlib import Path
+import re
+
 
 RELATIVE_INDICATORS = [
     "ago",
@@ -19,7 +22,6 @@ RELATIVE_INDICATORS = [
     "previous",
     "past",
 ]
-
 
 def is_relative_date(text_relative):
     text_lower = text_relative.lower()
@@ -51,3 +53,19 @@ def describe_relative_date(dt, reference=None):
         return f"{delta.days} day{'s' if delta.days > 1 else ''} ago"
     else:
         return "today"
+
+
+def load_kenyan_names(filepath="data/processed/kenyan_names.txt"):
+    if not Path(filepath).exists():
+        return set()
+    with open(filepath, "r", encoding="utf-8") as f:
+        return set(line.strip().lower() for line in f if line.strip())
+
+
+kenyan_names = load_kenyan_names()
+
+
+def name_list_detect(text_names):
+    words = re.findall(r"\b\w+\b", text_names)
+    matches = [w for w in words if w.lower() in kenyan_names]
+    return matches
