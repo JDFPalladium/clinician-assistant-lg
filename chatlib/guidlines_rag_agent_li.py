@@ -7,6 +7,12 @@ from langchain_core.prompts import ChatPromptTemplate
 import numpy as np
 import pandas as pd
 from llama_index.embeddings.openai import OpenAIEmbedding
+from langchain_openai import ChatOpenAI
+
+# try hybrid with hierarchical search and flat search
+storage_context_arv = StorageContext.from_defaults(persist_dir="data/processed/arv_metadata")
+index_arv = load_index_from_storage(storage_context_arv)
+arv_retriever = VectorIndexRetriever(index=index_arv, similarity_top_k=3)
 
 # load vectorstore summaries
 embeddings = np.load("data/processed/lp/summary_embeddings/embeddings.npy")
@@ -19,6 +25,9 @@ llm_llama = OpenAI(model="gpt-4o", temperature=0.0)
 
 # Create LLM reranker
 reranker = LLMRerank(llm=llm_llama, top_n=3)
+
+# summarization LLM
+summarizer_llm = ChatOpenAI(temperature=0.0, model="gpt-3.5-turbo-0125")
 
 # Define a prompt template for query expansion
 query_expansion_prompt = ChatPromptTemplate.from_messages([
@@ -48,6 +57,13 @@ def cosine_similarity_numpy(query_vec: np.ndarray, matrix: np.ndarray) -> np.nda
     
     # Dot product gives cosine similarity
     return matrix_norm @ query_norm
+
+def cosine_rerank(query_vec, nodes, embedder, top_n=3):
+    texts = [n.text for n in nodes]
+    node_vecs = embedder.get_text_embedding_batch(texts)
+    sims = cosine_similarity_numpy(query_vec, np.array(node_vecs))
+    top_idxs = sims.argsort()[-top_n:][::-1]
+    return [nodes[i] for i in top_idxs]
 
 def format_sources_for_html(sources):
     html_blocks = []
@@ -86,9 +102,14 @@ def rag_retrieve(query: str, llm) -> AppState:
         sources_raw = raw_retriever.retrieve(expanded_query)
         all_sources.extend(sources_raw)
 
+    # now, let's also load in three chunks from general db
+    sources_arv = arv_retriever.retrieve(expanded_query)
+    all_sources.extend(sources_arv)
+
     # Run retrieval (vector search) and reranking manually
     print(f"Retrieved {len(all_sources)} raw sources from vector search.")
-    sources = reranker.postprocess_nodes(all_sources, query_bundle)
+    # sources = reranker.postprocess_nodes(all_sources, query_bundle)
+    sources = cosine_rerank(query_embedding, all_sources, embedding_model, top_n=2)
     print(f"Retrieved {len(sources)} sources after reranking.")
     if not sources:
         return {
@@ -110,7 +131,7 @@ def rag_retrieve(query: str, llm) -> AppState:
     )
 
     print("Prompt length in characters:", len(summarization_prompt))
-    summary_response = llm.invoke(summarization_prompt)
+    summary_response = summarizer_llm.invoke(summarization_prompt)
 
     return {"rag_result": summary_response.content,
             "rag_sources": format_sources_for_html(sources),
