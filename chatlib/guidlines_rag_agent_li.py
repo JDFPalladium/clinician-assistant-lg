@@ -8,11 +8,6 @@ import pandas as pd
 from llama_index.embeddings.openai import OpenAIEmbedding
 from .helpers import expand_query, cosine_similarity_numpy, cosine_rerank, format_sources_for_html
 
-# try hybrid with hierarchical search and flat search
-storage_context_arv = StorageContext.from_defaults(persist_dir="data/processed/lp/indices/Global")
-index_arv = load_index_from_storage(storage_context_arv)
-arv_retriever = VectorIndexRetriever(index=index_arv, similarity_top_k=3)
-
 # load vectorstore summaries
 embeddings = np.load("data/processed/lp/summary_embeddings/embeddings.npy")
 df = pd.read_csv("data/processed/lp/summary_embeddings/index.tsv", sep="\t")
@@ -25,7 +20,7 @@ llm_llama = OpenAI(model="gpt-4o", temperature=0.0)
 # Create LLM reranker
 reranker = LLMRerank(llm=llm_llama, top_n=2)
 
-def rag_retrieve(query: str, llm) -> AppState:
+def rag_retrieve(query: str, llm, global_retriever) -> AppState:
     """Perform RAG search of repository containing authoritative information on HIV/AIDS in Kenya."""
     
     # Step 1: Expand the user query
@@ -44,12 +39,12 @@ def rag_retrieve(query: str, llm) -> AppState:
     for path in selected_paths:
         storage_context = StorageContext.from_defaults(persist_dir=path)
         index = load_index_from_storage(storage_context)
-        raw_retriever = VectorIndexRetriever(index=index, similarity_top_k=2)
+        raw_retriever = VectorIndexRetriever(index=index, similarity_top_k=3)
         sources_raw = raw_retriever.retrieve(expanded_query)
         all_sources.extend(sources_raw)
 
     # now, let's also load in three chunks from general db
-    sources_arv = arv_retriever.retrieve(expanded_query)
+    sources_arv = global_retriever.retrieve(expanded_query)
     all_sources.extend(sources_arv)
     print(f"{len(all_sources)} sources before deduplication.")
 

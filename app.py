@@ -8,7 +8,8 @@ from langgraph.graph import START, StateGraph
 from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
 from langgraph.prebuilt import tools_condition, ToolNode
 from langgraph.checkpoint.memory import MemorySaver
-
+from llama_index.core import StorageContext, load_index_from_storage
+from llama_index.core.retrievers import VectorIndexRetriever
 
 memory = MemorySaver()
 
@@ -26,10 +27,14 @@ from chatlib.idsr_definition import idsr_define
 from chatlib.phi_filter import detect_and_redact_phi
 from chatlib.assistant_node import assistant
 
+# load global guidelines retriever
+storage_context_arv = StorageContext.from_defaults(persist_dir="data/processed/lp/indices/Global")
+index_arv = load_index_from_storage(storage_context_arv)
+global_retriever = VectorIndexRetriever(index=index_arv, similarity_top_k=3)
 
 def rag_retrieve_tool(query):
     """Retrieve relevant HIV clinical guidelines for the given query."""
-    result = rag_retrieve(query, llm=llm)
+    result = rag_retrieve(query, llm=llm, global_retriever=global_retriever)
     return {
         "answer": result.get("answer", ""),
         "rag_sources": result.get("rag_sources", []),
@@ -39,7 +44,7 @@ def rag_retrieve_tool(query):
 
 def sql_chain_tool(query, pk_hash):
     """Query patient data from the SQL database and summarize results."""
-    result = sql_chain(query, llm=llm, pk_hash=pk_hash)
+    result = sql_chain(query, llm=llm, global_retriever=global_retriever, pk_hash=pk_hash)
     return {"answer": result.get("answer", ""), "last_tool": "sql_chain"}
 
 
@@ -87,7 +92,6 @@ When a tool is needed, respond only with a JSON object specifying the tool to ca
 When calling the "sql_chain" tool, always include the following arguments in the JSON response:
 
 - "query": the clinician's question
-- "rag_result": the clinical guideline context obtained from rag_retrieve
 - "pk_hash": the patient identifier string
 
 For example:

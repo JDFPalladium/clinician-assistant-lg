@@ -1,9 +1,16 @@
 import sqlite3
 import pandas as pd
+from llama_index.core import StorageContext, load_index_from_storage, VectorStoreIndex
+from llama_index.core.retrievers import VectorIndexRetriever
+from llama_index.llms.openai import OpenAI
+from llama_index.embeddings.openai import OpenAIEmbedding
+from langchain_openai import ChatOpenAI
 
 # import os
 from .helpers import describe_relative_date
 
+# summarization LLM
+summarizer_llm = ChatOpenAI(temperature=0.0, model="gpt-3.5-turbo-0125")
 
 def safe(val):
     if pd.isnull(val) or val in ("", "NULL"):
@@ -21,7 +28,7 @@ def extract_year(date_str):
         return "invalid date"
 
 
-def sql_chain(query: str, llm, rag_result: str, pk_hash: str) -> dict:
+def sql_chain(query: str, llm, global_retriever, pk_hash: str) -> dict:
     """
     Annotated function that takes a patient identifer (pk_hash) and returns
     all data related to that patient from the SQL database.
@@ -34,6 +41,18 @@ def sql_chain(query: str, llm, rag_result: str, pk_hash: str) -> dict:
     - rag_result: str - context information from the guidelines retrieval
     The function returns a dict with answer and last_tool keys.
     """
+
+    # Do basic retrieval and quick summarization
+    sources = global_retriever.retrieve(query)
+    summarization_prompt = (
+        "You're a clinical assistant helping a provider answer a question using HIV/AIDS guidelines.\n\n"
+        f"Question: {query}\n\n"
+        "Provide a detailed summary of the most relevant points to the user question from the following source texts. \n\n"
+        # "If the sources do not contain relevant information, simply say 'No relevant information found in the sources.'\n\n"
+        f"{sources}"
+    )
+    guidelines_output = summarizer_llm.invoke(summarization_prompt)
+    guidelines_summary = guidelines_output.content
 
     # pk_hash = os.environ.get("PK_HASH")
     if not pk_hash:
@@ -63,9 +82,9 @@ def sql_chain(query: str, llm, rag_result: str, pk_hash: str) -> dict:
         )
 
         summaries = []
-        ordinal_map = {1: "First", 2: "Second", 3: "Third", 4: "Fourth", 5: "Fifth"}
+        ordinal_map = {1: "First", 2: "Second", 3: "Third"}
         for idx, (_, row) in enumerate(
-            df.sort_values("VisitDate", ascending=False).head(5).iterrows(), start=1
+            df.sort_values("VisitDate", ascending=False).head(3).iterrows(), start=1
         ):
             ordinal = ordinal_map.get(idx, f"{idx}th")
             summaries.append(
@@ -99,9 +118,9 @@ def sql_chain(query: str, llm, rag_result: str, pk_hash: str) -> dict:
         df["ExpectedReturn"] = pd.to_datetime(df["ExpectedReturn"], errors="coerce")
 
         summaries = []
-        ordinal_map = {1: "First", 2: "Second", 3: "Third", 4: "Fourth", 5: "Fifth"}
+        ordinal_map = {1: "First", 2: "Second", 3: "Third"}
         for idx, (_, row) in enumerate(
-            df.sort_values("DispenseDate", ascending=False).head(5).iterrows(), start=1
+            df.sort_values("DispenseDate", ascending=False).head(3).iterrows(), start=1
         ):
             ordinal = ordinal_map.get(idx, f"{idx}th")
             summaries.append(
@@ -131,9 +150,9 @@ def sql_chain(query: str, llm, rag_result: str, pk_hash: str) -> dict:
         df["OrderedbyDate"] = pd.to_datetime(df["OrderedbyDate"], errors="coerce")
 
         summaries = []
-        ordinal_map = {1: "First", 2: "Second", 3: "Third", 4: "Fourth", 5: "Fifth"}
+        ordinal_map = {1: "First", 2: "Second", 3: "Third"}
         for idx, (_, row) in enumerate(
-            df.sort_values("OrderedbyDate", ascending=False).head(5).iterrows(), start=1
+            df.sort_values("OrderedbyDate", ascending=False).head(3).iterrows(), start=1
         ):
             summaries.append(
                 f"{ordinal_map.get(idx, idx)} most recent lab test, {describe_relative_date(row['OrderedbyDate'])}. TestName {safe(row['TestName'])}, TestResult {safe(row['TestResult'])},"
@@ -195,15 +214,15 @@ def sql_chain(query: str, llm, rag_result: str, pk_hash: str) -> dict:
         "and summarized patient data below, answer the question accurately and concisely. "
         "Only use the provided data; do not guess or hallucinate. "
         "If essential patient information is missing, explain what is missing instead of guessing. \n\n"
-        f"Question: {query}\n"
-        f"Guideline Context: {rag_result}\n"
-        f"Clinical Visits Summary:\n{visits_summary}\n"
-        f"Pharmacy Summary:\n{pharmacy_summary}\n"
-        f"Lab Summary:\n{lab_summary}\n"
+        f"Question: {query}\n\n"
+        f"Guideline Context: {guidelines_summary}\n\n"
+        f"Clinical Visits Summary:\n{visits_summary}\n\n"
+        f"Pharmacy Summary:\n{pharmacy_summary}\n\n"
+        f"Lab Summary:\n{lab_summary}\n\n"
         f"Demographic Summary:\n{demographic_summary}\n"
     )
     print("Prompt length (chars):", len(prompt))
-
+    print(prompt)
     response = llm.invoke(prompt)
     answer_text = response.content
     return {"answer": answer_text, "last_tool": "sql_chain"}
