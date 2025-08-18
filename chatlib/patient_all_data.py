@@ -12,8 +12,6 @@ def safe(val):
 
 
 # define a function that takes in a date string and returns a relative date description
-
-
 def extract_year(date_str):
     if pd.isnull(date_str) or date_str in ("", "NULL"):
         return "missing"
@@ -205,7 +203,7 @@ def sql_chain(query: str, llm, rag_result: str, pk_hash: str) -> dict:
         f"Demographic Summary:\n{demographic_summary}\n"
     )
     print("Prompt length (chars):", len(prompt))
-    print(prompt)
+
     response = llm.invoke(prompt)
     answer_text = response.content
     return {"answer": answer_text, "last_tool": "sql_chain"}

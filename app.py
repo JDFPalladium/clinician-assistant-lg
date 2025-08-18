@@ -31,15 +31,15 @@ def rag_retrieve_tool(query):
     """Retrieve relevant HIV clinical guidelines for the given query."""
     result = rag_retrieve(query, llm=llm)
     return {
-        "rag_result": result.get("rag_result", ""),
+        "answer": result.get("answer", ""),
         "rag_sources": result.get("rag_sources", []),
         "last_tool": "rag_retrieve",
     }
 
 
-def sql_chain_tool(query, rag_result, pk_hash):
+def sql_chain_tool(query, pk_hash):
     """Query patient data from the SQL database and summarize results."""
-    result = sql_chain(query, llm=llm, rag_result=rag_result, pk_hash=pk_hash)
+    result = sql_chain(query, llm=llm, pk_hash=pk_hash)
     return {"answer": result.get("answer", ""), "last_tool": "sql_chain"}
 
 
@@ -72,7 +72,7 @@ You are a helpful assistant supporting clinicians during patient visits. When a 
 You have access to four tools to help you answer the clinician's questions. 
 
 - rag_retrieve_tool: to access HIV clinical guidelines
-- sql_chain_tool: to access HIV data about the patient with whom the clinician is meeting. For straightforward factual questions about the patient, you may call sql_chain directly. For questions requiring clinical interpretation or classification, first call rag_retrieve to get relevant clinical guideline context, then include that context when calling sql_chain.
+- sql_chain_tool: to access HIV data about the patient with whom the clinician is meeting.
 - idsr_check_tool: to check if the patient case description matches any known diseases.
 - idsr_define_tool: to retrieve the official case definition of a disease when the clinician asks about it (e.g., “What is the description of cholera?”). Do not use this tool for analyzing symptom descriptions — use `idsr_check_tool` for that.
 
@@ -96,7 +96,6 @@ For example:
   "tool": "sql_chain_tool",
   "args": {
     "query": "What is the patient's latest lab results?",
-    "rag_result": "<clinical guideline context>",
     "pk_hash": "patient123"
   }
 }
