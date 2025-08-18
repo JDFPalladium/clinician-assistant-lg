@@ -1,0 +1,21 @@
+question,expand_time,retrieve_time,rerank_time,summarize_time,input_tokens_to_summarizer,total_time
+What are important drug interactions with dolutegravir?,3.56,1.37,1.82,12.4,2423,19.15
+How should PrEP be provided to adolescent girls?,1.97,1.51,2.08,9.38,2777,14.94
+When is cotrimoxazole prophylaxis indicated?,1.69,1.01,6.09,13.75,45,22.54
+What are the guidelines for ART failure?,1.82,0.94,6.73,11.09,2639,20.58
+How do you manage HIV in pregnancy?,2.74,0.92,2.7,15.51,2109,21.86
+When should infants start ART?,1.75,2.14,4.26,12.91,2056,21.06
+What is the recommended PrEP regimen for men who have sex with men?,2.22,0.99,2.8,6.56,2627,12.57
+How often should viral load be monitored?,2.87,0.75,4.31,11.97,2752,19.9
+What is the preferred first-line regimen for adults?,1.38,1.07,1.26,12.04,2356,15.75
+Can pregnant women use dolutegravir?,14.33,1.12,2.68,16.74,2176,34.87
+When is tenofovir not recommended?,2.32,0.88,1.26,8.34,2011,12.8
+How should HIV be managed in tuberculosis coinfection?,4.71,0.97,2.64,13.32,1999,21.65
+What lab tests are used to monitor ART?,2.37,1.07,5.53,13.7,2589,22.67
+When is second-line ART initiated?,1.69,1.14,1.5,8.15,2218,12.49
+What adherence strategies are recommended?,1.24,0.91,1.49,11.43,2162,15.07
+What are the contraindications to efavirenz?,2.49,0.92,14.64,10.66,2827,28.71
+Can HIV be managed with a two-drug regimen?,1.43,2.01,0.8,11.28,2426,15.51
+How do you handle treatment failure?,2.16,1.1,11.02,12.68,42,26.96
+When is regimen switching appropriate?,1.49,2.57,12.72,11.32,2056,28.11
+What is the role of resistance testing?,2.07,1.09,0.78,10.13,2235,14.07

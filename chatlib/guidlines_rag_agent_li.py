@@ -83,7 +83,7 @@ def rag_retrieve(query: str, llm) -> AppState:
     """Perform RAG search of repository containing authoritative information on HIV/AIDS in Kenya."""
     
     # Step 1: Expand the user query
-    query_bundle = QueryBundle(query) # use original query for reranking
+    # query_bundle = QueryBundle(query) # use original query for reranking
     expanded_query = expand_query(query, llm)
 
     # Embed the expanded query and find similar summaries
@@ -98,7 +98,7 @@ def rag_retrieve(query: str, llm) -> AppState:
     for path in selected_paths:
         storage_context = StorageContext.from_defaults(persist_dir=path)
         index = load_index_from_storage(storage_context)
-        raw_retriever = VectorIndexRetriever(index=index, similarity_top_k=3)
+        raw_retriever = VectorIndexRetriever(index=index, similarity_top_k=2)
         sources_raw = raw_retriever.retrieve(expanded_query)
         all_sources.extend(sources_raw)
 
