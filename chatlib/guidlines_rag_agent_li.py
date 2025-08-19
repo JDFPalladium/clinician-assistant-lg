@@ -78,14 +78,12 @@ def rag_retrieve(query: str, llm, global_retriever) -> AppState:
     
     # Use conversation history + a system message to inject RAG guidance
     prompt = (
-        "Based on the following clinical guideline excerpts, answer the clinician's question as precisely as possible.\n\n"
-        "Focus only on information that directly addresses the question.\n"
-        "Do not include information not explicitly contained in the sources.\n"
-        "Do not include background or general recommendations unless they are explicitly relevant.\n"
-        "If the information is not present in the sources, do not make assumptions or provide your own interpretations.\n\n"
+        "Answer the clinician's question using only the provided guideline excerpts.\n"
+        "Include only information explicitly present in the sources.\n"
+        "Return concise bullet points or short sentences.\n"
+        "If the answer cannot be found in the sources, say: 'No relevant information found.'\n\n"
         f"Clinician question: {query}\n\n"
-        "Guideline excerpts:\n"
-        f"{retrieved_text}"
+        f"Guideline excerpts:\n{retrieved_text}"
     )
 
     response = llm.invoke(prompt)
