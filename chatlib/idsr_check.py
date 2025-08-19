@@ -10,7 +10,6 @@ import json
 import math
 from collections import Counter
 import sqlite3
-import time
 
 # import os
 
@@ -130,11 +129,9 @@ def idsr_check(query: str, llm, sitecode) -> AppState:
     Returns:
         AppState: Updated state with search results.
     """
-    t0 = time.time()
     results = hybrid_search_with_query_keywords(
         query, vectorstore, tagged_documents, keywords, llm
     )
-    t1 = time.time()
 
     ## prepare to get location data
     # first, get sitecode from environment variable
@@ -188,8 +185,7 @@ def idsr_check(query: str, llm, sitecode) -> AppState:
             for doc in results
         ]
     )
-    
-    t2 = time.time()
+
     prompt = """
     Role & Context
     You are a medical assistant analyzing a clinical case in Kenya. You have:
@@ -264,7 +260,7 @@ def idsr_check(query: str, llm, sitecode) -> AppState:
         if llm_response
         else "No relevant disease information found."
     )
-    t3 = time.time()
+
     # Set up context to return.
     # First, use an LLM to identify which diseases from disease_definitions were mentioned in the answer_text
     disease_names_in_answer = [
@@ -305,12 +301,5 @@ def idsr_check(query: str, llm, sitecode) -> AppState:
             "### Epidemic Information:\n"
             + "\n".join([f"- {row[0]}: {row[1]}" for row in epidemic_info])
         )
-    t4 = time.time()
-
-    print(f"⏱️ Timing (seconds):")
-    print(f"  Hybrid search: {t1-t0:.2f}")
-    print(f"  Location info lookup: {t2-t1:.2f}")
-    print(f"  Response generation: {t3-t2:.2f}")
-    print(f"  Prepare context for later turn: {t4-t3:.2f}")
 
     return {"answer": answer_text, "last_tool": "idsr_check", "context": context_parts}  # type: ignore

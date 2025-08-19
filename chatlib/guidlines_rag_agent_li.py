@@ -1,5 +1,4 @@
 from llama_index.core import StorageContext, load_index_from_storage, QueryBundle
-from llama_index.core.postprocessor import LLMRerank
 from llama_index.core.retrievers import VectorIndexRetriever
 from llama_index.core.postprocessor import LLMRerank
 from llama_index.llms.openai import OpenAI
@@ -7,7 +6,7 @@ from .state_types import AppState
 import numpy as np
 import pandas as pd
 from llama_index.embeddings.openai import OpenAIEmbedding
-from .helpers import expand_query, cosine_similarity_numpy, cosine_rerank, format_sources_for_html
+from .helpers import expand_query, cosine_similarity_numpy, format_sources_for_html
 
 # load vectorstore summaries
 embeddings = np.load("data/processed/lp/summary_embeddings/embeddings.npy")

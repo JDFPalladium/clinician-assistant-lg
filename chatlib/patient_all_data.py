@@ -1,9 +1,5 @@
 import sqlite3
 import pandas as pd
-from llama_index.core import StorageContext, load_index_from_storage, VectorStoreIndex
-from llama_index.core.retrievers import VectorIndexRetriever
-from llama_index.llms.openai import OpenAI
-from llama_index.embeddings.openai import OpenAIEmbedding
 from langchain_openai import ChatOpenAI
 
 # import os
