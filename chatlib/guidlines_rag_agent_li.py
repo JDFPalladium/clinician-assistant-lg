@@ -16,7 +16,7 @@ df = pd.read_csv("data/processed/lp/summary_embeddings/index.tsv", sep="\t")
 embedding_model = OpenAIEmbedding()
 
 # Define your reranker-compatible LLM
-llm_llama = OpenAI(model="gpt-4o", temperature=0.0)
+llm_llama = OpenAI(model="gpt-4o-mini", temperature=0.0)
 
 # Create LLM reranker
 reranker = LLMRerank(llm=llm_llama, top_n=2)

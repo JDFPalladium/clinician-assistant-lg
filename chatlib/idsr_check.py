@@ -10,6 +10,7 @@ import json
 import math
 from collections import Counter
 import sqlite3
+import time
 
 # import os
 
@@ -113,9 +114,9 @@ def hybrid_search_with_query_keywords(
 
     ranked_docs = sorted(scored_docs, key=lambda x: -x[1])
     top_docs = [doc for doc, score in ranked_docs if score > 0]
-    top_5_docs = top_docs[:5]
+    top_3_docs = top_docs[:3]
 
-    merged = {doc.page_content: doc for doc in semantic_hits + top_5_docs}
+    merged = {doc.page_content: doc for doc in semantic_hits + top_3_docs}
     return list(merged.values())
 
 
@@ -129,10 +130,11 @@ def idsr_check(query: str, llm, sitecode) -> AppState:
     Returns:
         AppState: Updated state with search results.
     """
-
+    t0 = time.time()
     results = hybrid_search_with_query_keywords(
         query, vectorstore, tagged_documents, keywords, llm
     )
+    t1 = time.time()
 
     ## prepare to get location data
     # first, get sitecode from environment variable
@@ -186,21 +188,27 @@ def idsr_check(query: str, llm, sitecode) -> AppState:
             for doc in results
         ]
     )
-
+    
+    t2 = time.time()
     prompt = """
-    You are a medical assistant reviewing a brief clinical case in Kenya to help identify which diseases the patient may plausibly have. 
-    You have access to several disease definitions. You also have access to information about the prevalence of each disease in the county
-    where the patient is located. The prevalence of some diseases varies by season, and some diseases are also more likely when there is a
-    declared epidemic. Information on the timing of the rainy season and any declared epidemics is also provided.
+    Role & Context
+    You are a medical assistant analyzing a clinical case in Kenya. You have:
+    
+    Disease definitions
+    County-level prevalence, seasonality, epidemic alerts, and rainy season status
 
-    ## Instructions:
-    1. Carefully compare the case description to each disease definition, taking into account the prevalence and seasonality information.
-    2. If a disease seems like a possible match based on the available information, list it and explain why.
-    3. Only include rare diseases, or diseases that don't fit seasonally, if the match is extremely strong. Prioritize common and plausible conditions.
-    4. Only list diseases if there are plausible matches based on the case and context. If no plausible matches are found, do not list any diseases.
-    5. If the information provided is insufficient or ambiguous, prioritize asking clarifying questions before making any recommendations.
-    6. Clarifying questions may include inquiries about specific symptoms, patient demographics, exposures, travel history, or other relevant clinical details.
-    7. Provide a brief recommendation on next steps only if confident matches are identified or after clarifications are obtained.
+    Instructions
+    Compare the case to each disease definition, considering prevalence, seasonality, and epidemic alerts.
+
+    Only list diseases that are plausible matches. Do not list diseases that are unlikely, very unlikely, or impossible.
+
+    Keep reasoning to one concise line per plausible disease.
+
+    Include 2-3 clarifying questions that help distinguish between plausible matches.
+
+    Provide a single-line recommendation if appropriate.
+
+    Do not include exhaustive lists of all diseases; ignore diseases that are clearly not relevant.
 
 
     ## Case:
@@ -218,15 +226,14 @@ def idsr_check(query: str, llm, sitecode) -> AppState:
     Here are any relevant epidemic alerts for these diseases:
     {epidemic_info}
 
-    ## Expected Output
+    Expected Output (Concise & Structured)
 
-    If applicable, list possible disease matches with explanations.
+    Possible Matches: one line per disease, e.g.,
+    Disease Name: possible; prevalence; key note.
 
-    If needed, list clarifying questions to better understand the case.
+    Clarifying Questions: 2-3 critical questions
 
-    Provide a brief recommendation on next steps if appropriate.
-
-    If no matches or recommendations are possible, focus on clarifying questions.
+    Recommendation: single line on next steps
 
 
     """.format(
@@ -257,7 +264,7 @@ def idsr_check(query: str, llm, sitecode) -> AppState:
         if llm_response
         else "No relevant disease information found."
     )
-
+    t3 = time.time()
     # Set up context to return.
     # First, use an LLM to identify which diseases from disease_definitions were mentioned in the answer_text
     disease_names_in_answer = [
@@ -298,5 +305,12 @@ def idsr_check(query: str, llm, sitecode) -> AppState:
             "### Epidemic Information:\n"
             + "\n".join([f"- {row[0]}: {row[1]}" for row in epidemic_info])
         )
+    t4 = time.time()
+
+    print(f"⏱️ Timing (seconds):")
+    print(f"  Hybrid search: {t1-t0:.2f}")
+    print(f"  Location info lookup: {t2-t1:.2f}")
+    print(f"  Response generation: {t3-t2:.2f}")
+    print(f"  Prepare context for later turn: {t4-t3:.2f}")
 
     return {"answer": answer_text, "last_tool": "idsr_check", "context": context_parts}  # type: ignore
