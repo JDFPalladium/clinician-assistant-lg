@@ -1,0 +1,9 @@
+TO DO
+-- Understand the updated code
+-- Get all required document for Nigeria
+-- Clean up the repo
+-- Ensure graceful failure for all functions 
+-- Use Production grade logging
+-- Group all similar function into a class and class methods
+-- Stay in sync at all times
+-- NER necessary ??? 
