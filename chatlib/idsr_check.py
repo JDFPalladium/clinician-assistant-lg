@@ -33,8 +33,8 @@ tagged_documents = [Document(**d) for d in doc_dicts]
 keyword_doc_counts = Counter()
 total_docs = len(tagged_documents)
 
-for doc in tagged_documents:
-    seen = set(doc.metadata.get("matched_keywords", []))
+for tagged_doc in tagged_documents:
+    seen = set(tagged_doc.metadata.get("matched_keywords", []))
     for kw in seen:
         keyword_doc_counts[kw] += 1
 
@@ -117,9 +117,6 @@ def hybrid_search_with_query_keywords(
     top_3_docs = top_docs[:3]
 
     merged = {doc.page_content: doc for doc in semantic_hits + top_3_docs}
-    #print docs in merged
-    for doc in merged.values():
-        print(doc.metadata.get("disease_name"))
         
     return list(merged.values())
 
