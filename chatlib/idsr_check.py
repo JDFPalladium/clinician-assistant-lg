@@ -89,7 +89,8 @@ def hybrid_search_with_query_keywords(
     query, vstore, documents, keyword_list, llm, top_k=3
 ):
 
-    semantic_hits = vstore.similarity_search(query, k=top_k)
+    semantic_hits_with_scores = vstore.similarity_search_with_score(query, k=top_k)
+    semantic_hits = [doc for doc, score in semantic_hits_with_scores if score >= 0.75]  # tune threshold
 
     matched_keywords = extract_keywords_with_gpt(query, llm, keyword_list)
 
@@ -112,10 +113,14 @@ def hybrid_search_with_query_keywords(
     ]
 
     ranked_docs = sorted(scored_docs, key=lambda x: -x[1])
-    top_docs = [doc for doc, score in ranked_docs if score > 0]
+    top_docs = [doc for doc, score in ranked_docs if score > 1.5]
     top_3_docs = top_docs[:3]
 
     merged = {doc.page_content: doc for doc in semantic_hits + top_3_docs}
+    #print docs in merged
+    for doc in merged.values():
+        print(doc.metadata.get("disease_name"))
+        
     return list(merged.values())
 
 
@@ -196,15 +201,21 @@ def idsr_check(query: str, llm, sitecode) -> AppState:
     Instructions
     Compare the case to each disease definition, considering prevalence, seasonality, and epidemic alerts.
 
-    Only list diseases that are plausible matches. Do not list diseases that are unlikely, very unlikely, or impossible.
+    For each disease, classify as one of:
+    - HIGH: strong alignment with the case and context
+    - MEDIUM: possible but not strongly supported
+    - LOW: unlikely
+    - NONE: does not match at all
+
+    Only include diseases that are HIGH or MEDIUM. If no diseases are HIGH or MEDIUM, return:
+    Possible Matches: NONE
+    Clarifying Questions: NONE
+    Recommendation: NONE
 
     Keep reasoning to one concise line per plausible disease.
 
-    Include 2-3 clarifying questions that help distinguish between plausible matches.
-
-    Provide a single-line recommendation if appropriate.
-
-    Do not include exhaustive lists of all diseases; ignore diseases that are clearly not relevant.
+    Clarifying Questions: include 2-3 if there are plausible matches; otherwise output NONE.
+    Recommendation: single line if there are plausible matches; otherwise NONE.
 
 
     ## Case:
@@ -261,6 +272,10 @@ def idsr_check(query: str, llm, sitecode) -> AppState:
         else "No relevant disease information found."
     )
 
+    # Set up flag to indicate no relevant matches for further consideration
+    # if the string "Possible Matches: NONE" is found, then no match
+    no_relevant_matches = "Possible Matches: NONE" in answer_text
+
     # Set up context to return.
     # First, use an LLM to identify which diseases from disease_definitions were mentioned in the answer_text
     disease_names_in_answer = [
@@ -302,4 +317,7 @@ def idsr_check(query: str, llm, sitecode) -> AppState:
             + "\n".join([f"- {row[0]}: {row[1]}" for row in epidemic_info])
         )
 
-    return {"answer": answer_text, "last_tool": "idsr_check", "context": context_parts}  # type: ignore
+    return {"answer": answer_text,
+            "last_tool": "idsr_check",
+            "possible_match_flag": no_relevant_matches,
+            "context": context_parts}  # type: ignore
