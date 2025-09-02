@@ -26,6 +26,9 @@ parser = LlamaParse(
 # Create output directory if it doesn't exist
 os.makedirs("data/processed/lp/indices", exist_ok=True)
 
+# initialize list of nodes for global
+all_nodes = []
+
 async def parse_docs():
     for filename in os.listdir("data/raw/GuidelinesSections"):
         if filename.endswith(".pdf"):
@@ -53,6 +56,12 @@ async def parse_docs():
 
             index.storage_context.persist(persist_dir=f"data/processed/lp/indices/{short_filename}")
             print(f"✅ Saved index for {short_filename}")
+
+            all_nodes.extend(nodes)
+
+    # Create a global index from all nodes
+    global_index = VectorStoreIndex(all_nodes)
+    global_index.storage_context.persist(persist_dir="data/processed/lp/indices/Global")
 
 if __name__ == "__main__":
     asyncio.run(parse_docs())
