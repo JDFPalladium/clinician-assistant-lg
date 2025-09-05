@@ -29,21 +29,21 @@ jobs:
       - name: Format with black
         run: make format
 
-  push-to-huggingface:
-    needs: lint-and-format
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout full history
-        uses: actions/checkout@v3
-        with:
-          fetch-depth: 0  # Avoid shallow clone
+  # push-to-huggingface:
+  #   needs: lint-and-format
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - name: Checkout full history
+  #       uses: actions/checkout@v3
+  #       with:
+  #         fetch-depth: 0  # Avoid shallow clone
 
-      - name: Set up Git
-        run: |
-          git config --global user.email "actions@github.com"
-          git config --global user.name "GitHub Actions"
+  #     - name: Set up Git
+  #       run: |
+  #         git config --global user.email "actions@github.com"
+  #         git config --global user.name "GitHub Actions"
       
-      - name: Push to Hugging Face
-        run: |
-          git remote add hf https://username:${{ secrets.HF_TOKEN }}@huggingface.co/spaces/Nishauri/ClinicianAssistant || echo "remote exists"
-          git push hf main --force
+  #     - name: Push to Hugging Face
+  #       run: |
+  #         git remote add hf https://username:${{ secrets.HF_TOKEN }}@huggingface.co/spaces/Nishauri/ClinicianAssistant || echo "remote exists"
+  #         git push hf main --force

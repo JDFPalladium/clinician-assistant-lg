@@ -1,12 +1,12 @@
 from llama_index.core import StorageContext, load_index_from_storage, QueryBundle
-from llama_index.core.postprocessor import LLMRerank
 from llama_index.core.retrievers import VectorIndexRetriever
+from llama_index.core.postprocessor import LLMRerank
 from llama_index.llms.openai import OpenAI
 from .state_types import AppState
-from langchain_core.prompts import ChatPromptTemplate
 import numpy as np
 import pandas as pd
 from llama_index.embeddings.openai import OpenAIEmbedding
+from .helpers import expand_query, cosine_similarity_numpy, format_sources_for_html
 
 # load vectorstore summaries
 embeddings = np.load("data/processed/lp/summary_embeddings/embeddings.npy")
@@ -15,65 +15,12 @@ df = pd.read_csv("data/processed/lp/summary_embeddings/index.tsv", sep="\t")
 embedding_model = OpenAIEmbedding()
 
 # Define your reranker-compatible LLM
-llm_llama = OpenAI(model="gpt-4o", temperature=0.0)
+llm_llama = OpenAI(model="gpt-4o-mini", temperature=0.0)
 
 # Create LLM reranker
-reranker = LLMRerank(llm=llm_llama, top_n=3)
+reranker = LLMRerank(llm=llm_llama, top_n=2)
 
-# Define a prompt template for query expansion
-query_expansion_prompt = ChatPromptTemplate.from_messages(
-    [
-        ("system", "You are an expert in HIV medicine."),
-        (
-            "user",
-            (
-                "Given the query below, provide a concise, comma-separated list of related terms and synonyms "
-                "useful for document retrieval. Return only the list, no explanations.\n\n"
-                "Query: {query}"
-            ),
-        ),
-    ]
-)
-
-
-def expand_query(query: str, llm) -> str:
-    messages = query_expansion_prompt.format_messages(query=query)
-    response = llm.invoke(messages)
-    expanded = response.content.strip()
-    # If output is multiline list, convert to comma-separated string
-    if "\n" in expanded:
-        lines = [
-            line.strip("- ").strip() for line in expanded.splitlines() if line.strip()
-        ]
-        expanded = ", ".join(lines)
-    print(f"Expanded query: {expanded}")
-    return expanded
-
-
-def cosine_similarity_numpy(query_vec: np.ndarray, matrix: np.ndarray) -> np.ndarray:
-    # Normalize the query vector and the matrix
-    query_norm = query_vec / np.linalg.norm(query_vec)
-    matrix_norm = matrix / np.linalg.norm(matrix, axis=1, keepdims=True)
-
-    # Dot product gives cosine similarity
-    return matrix_norm @ query_norm
-
-
-def format_sources_for_html(sources):
-    html_blocks = []
-    for i, source in enumerate(sources):
-        text = source.text.replace("\n", "<br>").strip()
-        block = f"""
-        <details style='margin-bottom: 1em;'>
-            <summary><strong>Source {i+1}</strong></summary>
-            <div style='margin-top: 0.5em; font-family: monospace;'>{text}</div>
-        </details>
-        """
-        html_blocks.append(block)
-    return "\n".join(html_blocks)
-
-
-def rag_retrieve(query: str, llm) -> AppState:
+def rag_retrieve(query: str, llm, global_retriever) -> AppState:
     """Perform RAG search of repository containing authoritative information on HIV/AIDS in Kenya."""
 
     # Step 1: Expand the user query
@@ -96,33 +43,52 @@ def rag_retrieve(query: str, llm) -> AppState:
         sources_raw = raw_retriever.retrieve(expanded_query)
         all_sources.extend(sources_raw)
 
+    # now, let's also load in three chunks from general db
+    sources_arv = global_retriever.retrieve(expanded_query)
+    all_sources.extend(sources_arv)
+    print(f"{len(all_sources)} sources before deduplication.")
+
+    # --- Deduplicate by node_id ---
+    unique_sources = {}
+    for src in all_sources:
+        node_id = src.node.node_id
+        # keep the one with the higher score if duplicate
+        if node_id not in unique_sources or src.score > unique_sources[node_id].score:
+            unique_sources[node_id] = src
+
+    deduped_sources = list(unique_sources.values())
+    print(f"{len(deduped_sources)} sources remain after deduplication.")
+
     # Run retrieval (vector search) and reranking manually
-    print(f"Retrieved {len(all_sources)} raw sources from vector search.")
-    sources = reranker.postprocess_nodes(all_sources, query_bundle)
+    print(f"Retrieved {len(deduped_sources)} raw sources from vector search.")
+    sources = reranker.postprocess_nodes(deduped_sources, query_bundle)
+    # sources = cosine_rerank(query_embedding, deduped_sources, embedding_model, top_n=2)
     print(f"Retrieved {len(sources)} sources after reranking.")
+
     if not sources:
         return {
             "rag_result": "No relevant information found in the sources. Please try rephrasing your question.",
             "last_tool": "rag_retrieve",
         }
     # Format the retrieved sources for the response (and remove lengthy white space or repeated dashes)
-    retrieved_text = "\n\n".join(
-        [f"Source {i+1}: {source.text}" for i, source in enumerate(sources)]
+    retrieved_text = "\n\n".join([
+        f"Source {i+1}: {source.text}" for i, source in enumerate(sources)
+    ])
+    
+    # Use conversation history + a system message to inject RAG guidance
+    prompt = (
+        "Answer the clinician's question using only the provided guideline excerpts.\n"
+        "Include only information explicitly present in the sources.\n"
+        "Return concise bullet points or short sentences.\n"
+        "If the answer cannot be found in the sources, say: 'No relevant information found.'\n\n"
+        f"Clinician question: {query}\n\n"
+        f"Guideline excerpts:\n{retrieved_text}"
     )
 
-    summarization_prompt = (
-        "You're a clinical assistant helping a provider answer a question using HIV/AIDS guidelines.\n\n"
-        f"Question: {query}\n\n"
-        "Provide a detailed summary of the most relevant points to the user question from the following source texts and use bullet points. \n\n"
-        # "If the sources do not contain relevant information, simply say 'No relevant information found in the sources.'\n\n"
-        f"{retrieved_text}"
-    )
+    response = llm.invoke(prompt)
+    answer_text = response.content
 
-    print("Prompt length in characters:", len(summarization_prompt))
-    summary_response = llm.invoke(summarization_prompt)
-
-    return {
-        "rag_result": summary_response.content,
-        "rag_sources": format_sources_for_html(sources),
-        "last_tool": "rag_retrieve",
-    }  # type: ignore
+    return {"answer": answer_text,
+            "rag_sources": format_sources_for_html(sources),
+            "last_tool": "rag_retrieve"
+        }  # type: ignore

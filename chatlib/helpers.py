@@ -2,9 +2,8 @@ import dateparser
 import dateparser.search
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
-from pathlib import Path
-import re
-
+from langchain_core.prompts import ChatPromptTemplate
+import numpy as np
 
 RELATIVE_INDICATORS = [
     "ago",
@@ -56,17 +55,51 @@ def describe_relative_date(dt, reference=None):
         return "today"
 
 
-def load_kenyan_names(filepath="data/processed/kenyan_names.txt"):
-    if not Path(filepath).exists():
-        return set()
-    with open(filepath, "r", encoding="utf-8") as f:
-        return set(line.strip().lower() for line in f if line.strip())
+# Define a prompt template for query expansion
+query_expansion_prompt = ChatPromptTemplate.from_messages([
+    ("system", "You are an expert in HIV medicine."),
+    ("user", (
+        "Given the query below, provide a concise, comma-separated list of related terms and synonyms "
+        "useful for document retrieval. Return only the list, no explanations.\n\n"
+        "Query: {query}"
+    ))
+])
 
+def expand_query(query: str, llm) -> str:
+    messages = query_expansion_prompt.format_messages(query=query)
+    response = llm.invoke(messages)
+    expanded = response.content.strip()
+    # If output is multiline list, convert to comma-separated string
+    if "\n" in expanded:
+        lines = [line.strip("- ").strip() for line in expanded.splitlines() if line.strip()]
+        expanded = ", ".join(lines)
+    print(f"Expanded query: {expanded}")
+    return expanded
 
-kenyan_names = load_kenyan_names()
+def cosine_similarity_numpy(query_vec: np.ndarray, matrix: np.ndarray) -> np.ndarray:
+    # Normalize the query vector and the matrix
+    query_norm = query_vec / np.linalg.norm(query_vec)
+    matrix_norm = matrix / np.linalg.norm(matrix, axis=1, keepdims=True)
+    
+    # Dot product gives cosine similarity
+    return matrix_norm @ query_norm
 
+def cosine_rerank(query_vec, nodes, embedder, top_n=3):
+    texts = [n.text for n in nodes]
+    node_vecs = embedder.get_text_embedding_batch(texts)
+    sims = cosine_similarity_numpy(query_vec, np.array(node_vecs))
+    top_idxs = sims.argsort()[-top_n:][::-1]
+    return [nodes[i] for i in top_idxs]
 
-def name_list_detect(text_names):
-    words = re.findall(r"\b\w+\b", text_names)
-    matches = [w for w in words if w.lower() in kenyan_names]
-    return matches
+def format_sources_for_html(sources):
+    html_blocks = []
+    for i, source in enumerate(sources):
+        text = source.text.replace("\n", "<br>").strip()
+        block = f"""
+        <details style='margin-bottom: 1em;'>
+            <summary><strong>Source {i+1}</strong></summary>
+            <div style='margin-top: 0.5em; font-family: monospace;'>{text}</div>
+        </details>
+        """
+        html_blocks.append(block)
+    return "\n".join(html_blocks)

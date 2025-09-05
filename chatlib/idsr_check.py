@@ -33,8 +33,8 @@ tagged_documents = [Document(**d) for d in doc_dicts]
 keyword_doc_counts = Counter()
 total_docs = len(tagged_documents)
 
-for doc in tagged_documents:
-    seen = set(doc.metadata.get("matched_keywords", []))
+for tagged_doc in tagged_documents:
+    seen = set(tagged_doc.metadata.get("matched_keywords", []))
     for kw in seen:
         keyword_doc_counts[kw] += 1
 
@@ -89,7 +89,8 @@ def hybrid_search_with_query_keywords(
     query, vstore, documents, keyword_list, llm, top_k=3
 ):
 
-    semantic_hits = vstore.similarity_search(query, k=top_k)
+    semantic_hits_with_scores = vstore.similarity_search_with_score(query, k=top_k)
+    semantic_hits = [doc for doc, score in semantic_hits_with_scores if score >= 0.75]  # tune threshold
 
     matched_keywords = extract_keywords_with_gpt(query, llm, keyword_list)
 
@@ -112,10 +113,11 @@ def hybrid_search_with_query_keywords(
     ]
 
     ranked_docs = sorted(scored_docs, key=lambda x: -x[1])
-    top_docs = [doc for doc, score in ranked_docs if score > 0]
-    top_5_docs = top_docs[:5]
+    top_docs = [doc for doc, score in ranked_docs if score > 1.5]
+    top_3_docs = top_docs[:3]
 
-    merged = {doc.page_content: doc for doc in semantic_hits + top_5_docs}
+    merged = {doc.page_content: doc for doc in semantic_hits + top_3_docs}
+        
     return list(merged.values())
 
 
@@ -129,7 +131,6 @@ def idsr_check(query: str, llm, sitecode) -> AppState:
     Returns:
         AppState: Updated state with search results.
     """
-
     results = hybrid_search_with_query_keywords(
         query, vectorstore, tagged_documents, keywords, llm
     )
@@ -188,19 +189,30 @@ def idsr_check(query: str, llm, sitecode) -> AppState:
     )
 
     prompt = """
-    You are a medical assistant reviewing a brief clinical case in Kenya to help identify which diseases the patient may plausibly have. 
-    You have access to several disease definitions. You also have access to information about the prevalence of each disease in the county
-    where the patient is located. The prevalence of some diseases varies by season, and some diseases are also more likely when there is a
-    declared epidemic. Information on the timing of the rainy season and any declared epidemics is also provided.
+    Role & Context
+    You are a medical assistant analyzing a clinical case in Kenya. You have:
+    
+    Disease definitions
+    County-level prevalence, seasonality, epidemic alerts, and rainy season status
 
-    ## Instructions:
-    1. Carefully compare the case description to each disease definition, taking into account the prevalence and seasonality information.
-    2. If a disease seems like a possible match based on the available information, list it and explain why.
-    3. Only include rare diseases, or diseases that don't fit seasonally, if the match is extremely strong. Prioritize common and plausible conditions.
-    4. Only list diseases if there are plausible matches based on the case and context. If no plausible matches are found, do not list any diseases.
-    5. If the information provided is insufficient or ambiguous, prioritize asking clarifying questions before making any recommendations.
-    6. Clarifying questions may include inquiries about specific symptoms, patient demographics, exposures, travel history, or other relevant clinical details.
-    7. Provide a brief recommendation on next steps only if confident matches are identified or after clarifications are obtained.
+    Instructions
+    Compare the case to each disease definition, considering prevalence, seasonality, and epidemic alerts.
+
+    For each disease, classify as one of:
+    - HIGH: strong alignment with the case and context
+    - MEDIUM: possible but not strongly supported
+    - LOW: unlikely
+    - NONE: does not match at all
+
+    Only include diseases that are HIGH or MEDIUM. If no diseases are HIGH or MEDIUM, return:
+    Possible Matches: NONE
+    Clarifying Questions: NONE
+    Recommendation: NONE
+
+    Keep reasoning to one concise line per plausible disease.
+
+    Clarifying Questions: include 2-3 if there are plausible matches; otherwise output NONE.
+    Recommendation: single line if there are plausible matches; otherwise NONE.
 
 
     ## Case:
@@ -218,15 +230,14 @@ def idsr_check(query: str, llm, sitecode) -> AppState:
     Here are any relevant epidemic alerts for these diseases:
     {epidemic_info}
 
-    ## Expected Output
+    Expected Output (Concise & Structured)
 
-    If applicable, list possible disease matches with explanations.
+    Possible Matches: one line per disease, e.g.,
+    Disease Name: possible; prevalence; key note.
 
-    If needed, list clarifying questions to better understand the case.
+    Clarifying Questions: 2-3 critical questions
 
-    Provide a brief recommendation on next steps if appropriate.
-
-    If no matches or recommendations are possible, focus on clarifying questions.
+    Recommendation: single line on next steps
 
 
     """.format(
@@ -257,6 +268,10 @@ def idsr_check(query: str, llm, sitecode) -> AppState:
         if llm_response
         else "No relevant disease information found."
     )
+
+    # Set up flag to indicate no relevant matches for further consideration
+    # if the string "Possible Matches: NONE" is found, then no match
+    no_relevant_matches = "Possible Matches: NONE" in answer_text
 
     # Set up context to return.
     # First, use an LLM to identify which diseases from disease_definitions were mentioned in the answer_text
@@ -299,4 +314,7 @@ def idsr_check(query: str, llm, sitecode) -> AppState:
             + "\n".join([f"- {row[0]}: {row[1]}" for row in epidemic_info])
         )
 
-    return {"answer": answer_text, "last_tool": "idsr_check", "context": context_parts}  # type: ignore
+    return {"answer": answer_text,
+            "last_tool": "idsr_check",
+            "possible_match_flag": no_relevant_matches,
+            "context": context_parts}  # type: ignore
