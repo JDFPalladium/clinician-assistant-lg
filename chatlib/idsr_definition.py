@@ -10,13 +10,16 @@ with open("./data/processed/tagged_documents.json", "r", encoding="utf-8") as f:
 
 tagged_documents = [Document(**d) for d in doc_dicts]
 
+
 class DiseaseSelectionOutput(BaseModel):
     disease_name: Optional[str] = Field(
         description="The most likely disease the user is asking about, or null if no match is confident"
     )
 
 
-def select_disease_from_query(query: str, llm, tagged_docs: list[Document]) -> Optional[str]:
+def select_disease_from_query(
+    query: str, llm, tagged_docs: list[Document]
+) -> Optional[str]:
     disease_names = [doc.metadata.get("disease_name") for doc in tagged_docs]
     disease_list = "\n".join(f"- {name}" for name in disease_names)
 
@@ -41,13 +44,16 @@ If no match is clearly appropriate, set "disease_name" to null.
     )
 
     chain = prompt | llm | parser
-    output = chain.invoke({
-        "query": query,
-        "disease_list": disease_list,
-        "format_instructions": parser.get_format_instructions()
-    })
+    output = chain.invoke(
+        {
+            "query": query,
+            "disease_list": disease_list,
+            "format_instructions": parser.get_format_instructions(),
+        }
+    )
 
     return output.disease_name
+
 
 def idsr_define(query: str, llm) -> dict:
     disease_name = select_disease_from_query(query, llm, tagged_documents)
@@ -76,10 +82,6 @@ def idsr_define(query: str, llm) -> dict:
     """
             llm_response = llm.invoke(prompt)
 
-            return {
-                "answer": llm_response.content.strip()
-            }
+            return {"answer": llm_response.content.strip()}
 
-    return {
-        "answer": "Sorry, no case definition was found for the selected disease."
-    }
+    return {"answer": "Sorry, no case definition was found for the selected disease."}

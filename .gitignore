@@ -196,3 +196,9 @@ cython_debug/
 config.env
 data/
 guidance_docs/
+*.example.py
+local_model/
+chatlib/deduplicate_names.py
+chatlib/names.txt
+chatlib/unique_names.txt
+chatlib/test_phi_filter.py

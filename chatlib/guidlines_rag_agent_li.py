@@ -22,9 +22,9 @@ reranker = LLMRerank(llm=llm_llama, top_n=2)
 
 def rag_retrieve(query: str, llm, global_retriever) -> AppState:
     """Perform RAG search of repository containing authoritative information on HIV/AIDS in Kenya."""
-    
+
     # Step 1: Expand the user query
-    query_bundle = QueryBundle(query) # use original query for reranking
+    query_bundle = QueryBundle(query)  # use original query for reranking
     expanded_query = expand_query(query, llm)
 
     # Embed the expanded query and find similar summaries
@@ -68,7 +68,7 @@ def rag_retrieve(query: str, llm, global_retriever) -> AppState:
     if not sources:
         return {
             "rag_result": "No relevant information found in the sources. Please try rephrasing your question.",
-            "last_tool": "rag_retrieve"
+            "last_tool": "rag_retrieve",
         }
     # Format the retrieved sources for the response (and remove lengthy white space or repeated dashes)
     retrieved_text = "\n\n".join([
