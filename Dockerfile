@@ -1,40 +1,37 @@
-# Use official Python image
+# ===== Lean Dockerfile for production =====
 FROM python:3.11-slim
 
-# Set environment variables
+# Environment variables
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 ENV PIP_DEFAULT_TIMEOUT=100
 ENV PIP_DISABLE_PIP_VERSION_CHECK=1
 
-# Install system dependencies
+# Set working directory
+WORKDIR /app
+
+# Copy only requirements first for caching
+COPY requirements.txt .
+
+# Install system dependencies, Python packages, then remove build tools in a single layer
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    cmake \
-    libopenblas-dev \
-    liblapack-dev \
-    libgomp1 \
-    gfortran \
+        build-essential \
+        cmake \
+        libopenblas-dev \
+        liblapack-dev \
+        libgomp1 \
+        gfortran \
+    && pip install --no-cache-dir -r requirements.txt \
+    && apt-get remove -y build-essential cmake gfortran \
+    && apt-get autoremove -y \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-
-# Create and set working directory
-WORKDIR /app
-
-# Copy only requirements first to leverage Docker cache
-COPY requirements.txt .
-
-# Install Python dependencies with retries
-RUN echo "Installing Python dependencies..." && \
-    pip install --no-cache-dir --verbose -r requirements.txt
-
-
-# Copy application files
+# Copy app code (excluding raw data via .dockerignore)
 COPY . .
 
-# Expose Gradio port
+# Expose port only if needed for testing
 EXPOSE 7860
 
-# Start the application
+# Start the app
 CMD ["python", "app.py"]

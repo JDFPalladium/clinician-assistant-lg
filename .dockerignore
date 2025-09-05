@@ -25,3 +25,6 @@ logs
 *.egg-info
 dist
 build
+
+# Ignore raw data
+data/raw/
