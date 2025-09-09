@@ -1,0 +1,3 @@
+[submodule "src/clinical-assistant-tools"]
+	path = src/clinical-assistant-tools
+	url = https://github.com/JDFPalladium/clinical-assistant-tools.git
