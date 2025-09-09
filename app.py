@@ -8,8 +8,6 @@ from langgraph.graph import START, StateGraph
 from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
 from langgraph.prebuilt import tools_condition, ToolNode
 from langgraph.checkpoint.memory import MemorySaver
-from llama_index.core import StorageContext, load_index_from_storage
-from llama_index.core.retrievers import VectorIndexRetriever
 
 memory = MemorySaver()
 
@@ -20,43 +18,39 @@ os.environ.get("OPENAI_API_KEY")
 llm = ChatOpenAI(temperature=0.0, model="gpt-4o")
 
 from chatlib.state_types import AppState
-from chatlib.guidlines_rag_agent_li import rag_retrieve
-from chatlib.patient_all_data import sql_chain
-from chatlib.idsr_check import idsr_check
 from chatlib.idsr_definition import idsr_define
 from chatlib.phi_filter import detect_and_redact_phi
 from chatlib.assistant_node import assistant
 
-# load global guidelines retriever
-storage_context_arv = StorageContext.from_defaults(persist_dir="data/processed/lp/indices/Global")
-index_arv = load_index_from_storage(storage_context_arv)
-global_retriever = VectorIndexRetriever(index=index_arv, similarity_top_k=3)
+from ai_tools.guidelines_parsing_tool import rag_retrieve
+from ai_tools.idsr_check_tool import idsr_check
+from ai_tools.patient_sql_tool import sql_chain, get_rag_retriever
 
 def rag_retrieve_tool(query):
     """Retrieve relevant HIV clinical guidelines for the given query."""
-    result = rag_retrieve(query, llm=llm, global_retriever=global_retriever)
+    result = rag_retrieve(query, llm=llm)
     return {
         "answer": result.get("answer", ""),
         "rag_sources": result.get("rag_sources", []),
         "last_tool": "rag_retrieve",
     }
 
-
-def sql_chain_tool(query, pk_hash):
-    """Query patient data from the SQL database and summarize results."""
-    result = sql_chain(query, llm=llm, global_retriever=global_retriever, pk_hash=pk_hash)
-    return {"answer": result.get("answer", ""), "last_tool": "sql_chain"}
-
-
 def idsr_check_tool(query, sitecode):
     """Check if the patient case description matches any known diseases."""
     result = idsr_check(query, llm=llm, sitecode=sitecode)
-
     return {
         "answer": result.get("answer", ""),
         "last_tool": "idsr_check",
         "context": result.get("context", None),
     }
+
+def sql_chain_tool(query, pk_hash):
+    """Query patient data from the SQL database and summarize results."""
+    retriever = get_rag_retriever()
+    result = sql_chain(query, llm=llm, global_retriever=retriever, pk_hash=pk_hash)
+    return {"answer": result.get("answer", ""),
+             "last_tool": "sql_chain"}
+
 
 def idsr_define_tool(query):
     """Retrieve disease definition based on the query."""
